@@ -1,11 +1,14 @@
-export const metadata = {
-  title: "Enterprise Planning Platform",
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+
+export const metadata: Metadata = {
+  title: "Enterprise",
 };
 
-export default function PlatformLayout({
+export default function Layout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
-  return children;
+  return <>{children}</>;
 }
