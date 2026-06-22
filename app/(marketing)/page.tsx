@@ -1,11 +1,13 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   Brain,
-  Map,
+  Building2,
+  Server,
   Shield,
+  Sparkles,
   TrendingUp,
+  Users,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,42 +19,53 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const features = [
-  {
-    icon: Brain,
-    title: "AI-Powered Forecasting",
-    description:
-      "Predict load growth from EV adoption, population shifts, and hyperscale data center buildout with precision models.",
-  },
+const capabilities = [
   {
     icon: TrendingUp,
-    title: "Growth Scenario Modeling",
+    title: "Capacity Forecasting",
     description:
-      "Run what-if scenarios across multiple growth vectors to stress-test your grid before bottlenecks emerge.",
-  },
-  {
-    icon: Map,
-    title: "Substation Intelligence",
-    description:
-      "Real-time visibility into substation capacity, risk levels, and geographic load distribution across your service territory.",
-  },
-  {
-    icon: BarChart3,
-    title: "Impact Analytics",
-    description:
-      "Decompose load growth by source — residential EV, fleet charging, AI data centers — with actionable charts.",
+      "Forecast 1-, 3-, and 5-year load growth scenarios across EV adoption, population growth, and data center expansion.",
   },
   {
     icon: Shield,
-    title: "Risk Classification",
+    title: "Transformer Risk Scoring",
     description:
-      "Automated LOW / MEDIUM / HIGH risk scoring with capacity recommendations tailored to your infrastructure timeline.",
+      "Identify overload risk, aging infrastructure, and N-1 reliability concerns before failures occur.",
   },
   {
-    icon: Zap,
-    title: "Enterprise Ready",
+    icon: Building2,
+    title: "Interconnection Analysis",
     description:
-      "Built for investor demos and utility operations teams. Secure, scalable, and designed for mission-critical planning.",
+      "Evaluate large-load requests and data center projects against available grid capacity.",
+  },
+  {
+    icon: Brain,
+    title: "AI Planning Copilot",
+    description:
+      "Generate prioritized infrastructure recommendations and capital investment plans.",
+  },
+];
+
+const customers = [
+  {
+    icon: Zap,
+    title: "Investor-Owned Utilities",
+    examples: "Eversource, National Grid, Avangrid",
+  },
+  {
+    icon: Server,
+    title: "Regional Grid Operators",
+    examples: "ISO New England, NYISO, PJM",
+  },
+  {
+    icon: TrendingUp,
+    title: "Transmission Planning Teams",
+    examples: "Reliability planning, capital planning, system expansion",
+  },
+  {
+    icon: Users,
+    title: "Large Load Strategy Teams",
+    examples: "Data centers, hyperscalers, industrial electrification",
   },
 ];
 
@@ -79,28 +92,28 @@ export default function LandingPage() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
               </span>
-              Next-Gen Utility Intelligence
+              AI Infrastructure Planning Platform
             </div>
 
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Predict Grid Bottlenecks{" "}
-              <span className="text-gradient">Before They Happen</span>
+              AI-Powered Grid Planning for the Era of{" "}
+              <span className="text-gradient">Data Centers and Electrification</span>
             </h1>
 
             <p className="mt-6 text-lg text-muted-foreground sm:text-xl">
-              AI-powered load forecasting for utilities facing rapid growth from
-              EVs and data centers.
+              Forecast grid constraints, evaluate interconnection risk, and
+              prioritize capital investments before reliability is impacted.
             </p>
 
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Button size="lg" className="glow-cyan" asChild>
                 <Link href="/enterprise">
-                  Open Planning Platform
+                  Launch Platform
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <Link href="/dashboard">Forecast Demo</Link>
+                <Link href="/dashboard">View Forecast Demo</Link>
               </Button>
             </div>
           </div>
@@ -124,12 +137,38 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Positioning */}
+      <section className="border-t border-border/60 py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight">
+              Built for Modern Utility Planning
+            </h2>
+            <div className="mt-6 space-y-4 text-muted-foreground">
+              <p className="text-base leading-relaxed sm:text-lg">
+                Utilities are facing unprecedented load growth from AI data
+                centers, electrification, EV adoption, and population growth.
+                Traditional planning workflows struggle to identify future grid
+                constraints before they impact reliability and interconnection
+                timelines.
+              </p>
+              <p className="text-base leading-relaxed sm:text-lg">
+                GridVision AI enables utilities and grid operators to forecast
+                constraints, assess infrastructure risk, analyze interconnection
+                requests, and prioritize capital investments using AI-powered
+                planning tools.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Capabilities */}
       <section className="border-t border-border/60 bg-card/30 py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">
-              Infrastructure Planning, Reimagined
+              Planning Intelligence for Modern Utilities
             </h2>
             <p className="mt-4 text-muted-foreground">
               GridVision AI gives utility operators the intelligence they need to
@@ -137,18 +176,74 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((feature) => (
+          <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {capabilities.map((cap) => (
               <Card
-                key={feature.title}
+                key={cap.title}
                 className="border-border/60 bg-card/80 transition-colors hover:border-primary/30"
               >
                 <CardHeader>
                   <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
-                    <feature.icon className="h-5 w-5 text-primary" />
+                    <cap.icon className="h-5 w-5 text-primary" />
                   </div>
-                  <CardTitle className="text-lg">{feature.title}</CardTitle>
-                  <CardDescription>{feature.description}</CardDescription>
+                  <CardTitle className="text-lg">{cap.title}</CardTitle>
+                  <CardDescription>{cap.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Grid change context */}
+      <section className="border-t border-border/60 py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight">
+              The Grid Is Changing Faster Than Traditional Planning Tools
+            </h2>
+            <div className="mt-6 space-y-4 text-muted-foreground">
+              <p className="text-base leading-relaxed sm:text-lg">
+                Utilities are facing unprecedented demand growth from AI data
+                centers, electrification, EV adoption, and population shifts.
+                Traditional planning workflows struggle to identify future
+                constraints before they impact reliability.
+              </p>
+              <p className="text-base leading-relaxed sm:text-lg">
+                GridVision AI enables utilities to forecast constraints, assess
+                infrastructure risk, analyze interconnection requests, and
+                prioritize capital investments using AI-powered planning tools.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Target customers */}
+      <section className="border-t border-border/60 py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight">
+              Built for Utilities and Grid Operators
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              Built for the teams responsible for long-range infrastructure
+              planning, interconnection review, and capital prioritization.
+            </p>
+          </div>
+
+          <div className="mt-16 grid gap-6 sm:grid-cols-2">
+            {customers.map((customer) => (
+              <Card
+                key={customer.title}
+                className="border-border/60 bg-card/80 transition-colors hover:border-primary/30"
+              >
+                <CardHeader>
+                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
+                    <customer.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <CardTitle className="text-lg">{customer.title}</CardTitle>
+                  <CardDescription>{customer.examples}</CardDescription>
                 </CardHeader>
               </Card>
             ))}
@@ -157,28 +252,31 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-24">
+      <section className="border-t border-border/60 py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card">
             <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
             <CardContent className="relative flex flex-col items-center px-6 py-16 text-center sm:px-12">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
               <h2 className="text-3xl font-bold tracking-tight">
                 Ready to Forecast Your Grid&apos;s Future?
               </h2>
               <p className="mt-4 max-w-xl text-muted-foreground">
-                Model EV adoption, population growth, and data center expansion
-                in seconds. Get risk scores and capacity recommendations
-                instantly.
+                Forecast constraints, score infrastructure risk, and generate
+                AI planning recommendations across your entire service
+                territory — in seconds.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <Button size="lg" asChild>
                   <Link href="/enterprise">
-                    Open Planning Platform
+                    Launch Platform
                     <ArrowRight className="ml-1 h-4 w-4" />
                   </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild>
-                  <Link href="/map">Explore Grid Map</Link>
+                  <Link href="/dashboard">View Forecast Demo</Link>
                 </Button>
               </div>
             </CardContent>

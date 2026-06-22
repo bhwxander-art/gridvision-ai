@@ -58,7 +58,7 @@ const timeline = [
   },
   {
     year: "2026",
-    event: "Expanded to real-time substation monitoring and grid mapping",
+    event: "Expanded to interconnection analysis, transformer risk scoring, and AI Planning Copilot",
   },
 ];
 
@@ -79,10 +79,10 @@ export default function AboutPage() {
               <span className="text-gradient">Shortages Occur</span>
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-              GridVision AI helps utility companies forecast future electrical
-              load growth caused by EV adoption, population growth, and AI data
-              centers — so they can invest in infrastructure proactively, not
-              reactively.
+              GridVision AI is an AI-powered infrastructure planning platform
+              designed to help electric utilities anticipate grid constraints,
+              improve reliability planning, and make smarter capital investment
+              decisions.
             </p>
           </div>
         </div>
@@ -112,8 +112,8 @@ export default function AboutPage() {
                 </p>
                 <p>
                   GridVision AI delivers that intelligence — turning complex
-                  growth scenarios into clear forecasts, risk classifications,
-                  and actionable capacity recommendations.
+                  growth scenarios into constraint forecasts, infrastructure
+                  risk scores, and prioritized capital investment recommendations.
                 </p>
               </div>
             </div>
