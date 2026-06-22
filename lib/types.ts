@@ -1,4 +1,4 @@
-import type { PlanningHorizon } from "@/lib/planning-engine";
+import type { PlanningHorizon, DataCenterInterconnection } from "@/lib/planning-engine";
 
 // ── Core grid types ────────────────────────────────────────────────────────
 export interface GridLoad {
@@ -107,4 +107,12 @@ export interface GridStatusResponse {
   dcQueueMW: number;
   source: string;
   timestamp: string;
+  freshness: "live" | "delayed" | "mock";
+  isMock: boolean;
+}
+
+/** Returned by GET /api/datacenters */
+export interface DataCenterQueueResponse {
+  queue: DataCenterInterconnection[];
+  _provenance: import("@/lib/provenance").ProvenanceInfo;
 }

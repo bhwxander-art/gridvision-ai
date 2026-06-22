@@ -1,33 +1,33 @@
 import { NextResponse } from "next/server";
 import type { AnalyticsData } from "@/lib/types";
-import {
-  loadGrowthData,
-  evImpactData,
-  dataCenterImpactData,
-  monthlyLoadTrend,
-} from "@/lib/sample-data";
+import type { ProvenanceInfo } from "@/lib/provenance";
+import { makeProvenance, mockProvenance } from "@/lib/provenance";
+import { fetchEIAAnalyticsData } from "@/lib/adapters/eia.adapter";
 
-// Real integration point: replace with forecast model / historian queries.
-// Response shape: AnalyticsData
-export async function GET(): Promise<NextResponse<AnalyticsData>> {
+type AnalyticsResponse = AnalyticsData & { _provenance: ProvenanceInfo };
+
+export async function GET(): Promise<NextResponse<AnalyticsResponse>> {
   try {
-    const body: AnalyticsData = {
-      loadGrowth: loadGrowthData,
-      evImpact: evImpactData,
-      dataCenterImpact: dataCenterImpactData,
-      monthlyTrend: monthlyLoadTrend,
-    };
+    const { provenance: adapterProv, ...analyticsData } = await fetchEIAAnalyticsData();
+    const prov = makeProvenance(
+      adapterProv.sourceName,
+      adapterProv.fetchedAt,
+      adapterProv.dataQuality === "mock"
+    );
 
-    return NextResponse.json(body, {
-      headers: {
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
-        "X-Data-Source": "mock",
-      },
-    });
+    return NextResponse.json(
+      { ...analyticsData, _provenance: prov },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=3600, stale-while-revalidate=7200",
+          "X-Data-Source": adapterProv.dataQuality,
+        },
+      }
+    );
   } catch (err) {
     console.error("[api/analytics] handler error", err);
     return NextResponse.json(
-      { error: "Failed to load analytics" } as unknown as AnalyticsData,
+      { error: "Failed to load analytics" } as unknown as AnalyticsResponse,
       { status: 500 }
     );
   }

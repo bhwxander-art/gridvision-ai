@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { SubstationServiceData } from "@/lib/services/substation.service";
+import type { Substation } from "@/lib/types";
 import {
   substationPortfolio,
   planningTerritory,
@@ -9,9 +10,9 @@ import {
 import { substations } from "@/lib/sample-data";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { SubstationRepository } from "@/lib/db/repositories/substation.repository";
-import type { Substation } from "@/lib/types";
+import { makeProvenance, mockProvenance } from "@/lib/provenance";
 
-const MOCK_BODY: SubstationServiceData = {
+const MOCK_BASE = {
   portfolio: substationPortfolio,
   trend: transformerLoadingTrend,
   simple: substations,
@@ -41,11 +42,12 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
         };
       });
 
+      const now = new Date().toISOString();
       const body: SubstationServiceData = {
+        ...MOCK_BASE,
         portfolio,
-        trend: transformerLoadingTrend,
         simple,
-        config: { territory: planningTerritory, loadGrowthAssumptions },
+        _provenance: makeProvenance("Supabase", now, false),
       };
 
       return NextResponse.json(body, {
@@ -60,18 +62,13 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
   }
 
   // ── 2. Mock fallback ────────────────────────────────────────────────────────
-  try {
-    return NextResponse.json(MOCK_BODY, {
+  return NextResponse.json(
+    { ...MOCK_BASE, _provenance: mockProvenance() },
+    {
       headers: {
         "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
         "X-Data-Source": "mock",
       },
-    });
-  } catch (err) {
-    console.error("[api/substations] handler error", err);
-    return NextResponse.json(
-      { error: "Failed to load substation data" } as unknown as SubstationServiceData,
-      { status: 500 }
-    );
-  }
+    }
+  );
 }

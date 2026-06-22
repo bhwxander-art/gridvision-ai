@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { ProvenanceInfo } from "@/lib/provenance";
 import {
   EnterpriseShell,
   type EnterpriseSection,
@@ -23,6 +24,25 @@ import {
 } from "@/components/ui/card";
 import { useSubstationData } from "@/lib/hooks/use-substation-data";
 import { useDataCenterQueue } from "@/lib/hooks/use-datacenter-queue";
+
+function DataBadge({ provenance }: { provenance: ProvenanceInfo | null }) {
+  if (!provenance) return null;
+  const styles = {
+    live:    "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    delayed: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+    mock:    "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  } as const;
+  const labels = { live: "LIVE", delayed: "DELAYED", mock: "MOCK" } as const;
+  const dots = { live: "bg-emerald-400", delayed: "bg-yellow-400", mock: "bg-slate-400" } as const;
+  const f = provenance.freshness;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-widest ${styles[f]}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dots[f]} ${f === "live" ? "animate-pulse" : ""}`} />
+      {labels[f]}
+      <span className="font-normal opacity-60">· {provenance.source}</span>
+    </span>
+  );
+}
 
 function EnterpriseSkeleton() {
   return (
@@ -57,6 +77,7 @@ export default function EnterprisePlanningPage() {
 
   const {
     data: substationData,
+    provenance,
     loading: ssLoading,
     error: ssError,
   } = useSubstationData();
@@ -84,6 +105,7 @@ export default function EnterprisePlanningPage() {
       activeSection={section}
       onSectionChange={setSection}
       territory={substationData?.config.territory}
+      badge={<DataBadge provenance={provenance} />}
     >
       {loading && <EnterpriseSkeleton />}
 

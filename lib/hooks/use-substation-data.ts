@@ -5,17 +5,19 @@ import {
   fetchSubstationData,
   type SubstationServiceData,
 } from "@/lib/services/substation.service";
+import type { ProvenanceInfo } from "@/lib/provenance";
 
 interface UseSubstationDataResult {
   data: SubstationServiceData | null;
+  provenance: ProvenanceInfo | null;
   loading: boolean;
   error: Error | null;
-  /** Trigger a fresh fetch (e.g. on user-initiated retry). */
   refetch: () => void;
 }
 
 export function useSubstationData(): UseSubstationDataResult {
   const [data, setData] = useState<SubstationServiceData | null>(null);
+  const [provenance, setProvenance] = useState<ProvenanceInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [fetchKey, setFetchKey] = useState(0);
@@ -29,6 +31,7 @@ export function useSubstationData(): UseSubstationDataResult {
 
     fetchSubstationData({ signal: controller.signal })
       .then((d) => {
+        setProvenance(d._provenance ?? null);
         setData(d);
         setLoading(false);
       })
@@ -41,5 +44,5 @@ export function useSubstationData(): UseSubstationDataResult {
     return () => controller.abort();
   }, [fetchKey]);
 
-  return { data, loading, error, refetch };
+  return { data, provenance, loading, error, refetch };
 }

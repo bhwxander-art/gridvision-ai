@@ -97,6 +97,22 @@ export interface DbForecastRun {
 
 export type DbForecastRunInsert = Omit<DbForecastRun, "id" | "created_at">;
 
+// ── scenarios ─────────────────────────────────────────────────────────────────
+
+export interface DbScenario {
+  id: string;          // UUID
+  name: string;
+  inputs: {
+    dataCenterLoadMW: number;
+    evGrowthPct: number;
+    populationGrowthPct: number;
+    commercialGrowthPct: number;
+  };
+  created_at: string;
+}
+
+export type DbScenarioInsert = Omit<DbScenario, "id" | "created_at">;
+
 // ── Supabase nested join shapes ───────────────────────────────────────────────
 
 /** Shape returned by .select('*, transformers(*), feeders(*)') */

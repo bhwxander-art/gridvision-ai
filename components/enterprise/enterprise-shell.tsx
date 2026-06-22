@@ -29,6 +29,7 @@ interface EnterpriseShellProps {
   onSectionChange: (section: EnterpriseSection) => void;
   children: React.ReactNode;
   territory?: PlanningTerritory;
+  badge?: React.ReactNode;
 }
 
 export function EnterpriseShell({
@@ -36,6 +37,7 @@ export function EnterpriseShell({
   onSectionChange,
   children,
   territory,
+  badge,
 }: EnterpriseShellProps) {
   return (
     <div className="flex min-h-screen bg-[#070b12]">
@@ -136,10 +138,12 @@ export function EnterpriseShell({
                 </>
               )}
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-              Live
-            </span>
+            {badge ?? (
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-slate-500" />
+                Loading…
+              </span>
+            )}
           </div>
         </header>
 

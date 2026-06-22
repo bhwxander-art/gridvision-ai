@@ -1,54 +1,28 @@
-import type { DataCenterInterconnection } from "@/lib/types";
+import type { DataCenterInterconnection, DataCenterQueueResponse } from "@/lib/types";
 import { fetchWithRetry } from "@/lib/api/retry";
 import { dataCenterQueue } from "@/lib/enterprise-data";
-
-// ── Mock fallback ──────────────────────────────────────────────────────────
-
-const MOCK_QUEUE = dataCenterQueue;
-
-// ── DB source (server-side only, dynamically imported) ──────────────────────
-
-async function fetchFromDb(): Promise<DataCenterInterconnection[]> {
-  const { isDbConfigured, getServerClient } = await import("@/lib/db/client");
-  if (!isDbConfigured()) throw new Error("Supabase not configured");
-
-  const { DataCenterRepository } = await import(
-    "@/lib/db/repositories/datacenter.repository"
-  );
-  const repo = new DataCenterRepository(getServerClient());
-  return repo.findAll();
-}
+import { mockProvenance } from "@/lib/provenance";
 
 // ── Service function ────────────────────────────────────────────────────────
 
 /**
  * Fetches the active data-center interconnection queue from the highest-priority
  * available source:
- *   1. Supabase database  (server-side only, requires NEXT_PUBLIC_SUPABASE_URL)
- *   2. GET /api/datacenters  (HTTP fetch; works client- and server-side)
- *   3. In-memory mock data  (always available as last resort)
+ *   1. GET /api/datacenters  (HTTP fetch; API route handles DB → mock internally)
+ *   2. In-memory mock data  (always available as last resort)
  */
 export async function fetchDataCenterQueue(opts?: {
   signal?: AbortSignal;
-}): Promise<DataCenterInterconnection[]> {
-  // ── 1. DB (server-side only) ──────────────────────────────────────────────
-  if (typeof window === "undefined") {
-    try {
-      return await fetchFromDb();
-    } catch (dbErr) {
-      if (dbErr instanceof DOMException && dbErr.name === "AbortError") throw dbErr;
-    }
-  }
-
-  // ── 2. API route ──────────────────────────────────────────────────────────
+}): Promise<DataCenterQueueResponse> {
+  // ── 1. API route ──────────────────────────────────────────────────────────
   try {
-    return await fetchWithRetry<DataCenterInterconnection[]>("/api/datacenters", {
+    return await fetchWithRetry<DataCenterQueueResponse>("/api/datacenters", {
       signal: opts?.signal,
     });
   } catch (apiErr) {
     if (apiErr instanceof DOMException && apiErr.name === "AbortError") throw apiErr;
   }
 
-  // ── 3. Mock fallback ──────────────────────────────────────────────────────
-  return MOCK_QUEUE;
+  // ── 2. Mock fallback ──────────────────────────────────────────────────────
+  return { queue: dataCenterQueue, _provenance: mockProvenance() };
 }

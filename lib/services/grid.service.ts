@@ -17,6 +17,8 @@ const MOCK_GRID_STATUS: GridStatusResponse = {
   dcQueueMW: 262,
   source: "GridVision (mock)",
   timestamp: new Date().toISOString(),
+  freshness: "mock",
+  isMock: true,
 };
 
 const MOCK_ANALYTICS: AnalyticsData = {
@@ -26,54 +28,17 @@ const MOCK_ANALYTICS: AnalyticsData = {
   monthlyTrend: monthlyLoadTrend,
 };
 
-// ── DB source (server-side only, dynamically imported) ──────────────────────
-
-async function fetchGridLoadFromDb(): Promise<GridLoad | null> {
-  const { isDbConfigured, getServerClient } = await import("@/lib/db/client");
-  if (!isDbConfigured()) return null;
-
-  const { GridLoadRepository } = await import(
-    "@/lib/db/repositories/grid-load.repository"
-  );
-  const repo = new GridLoadRepository(getServerClient());
-  return repo.getLatest();
-}
-
 // ── Service functions ──────────────────────────────────────────────────────
 
 /**
  * Fetches the current grid status from the highest-priority available source:
- *   1. Supabase grid_load_history  (latest reading, server-side only)
- *   2. GET /api/grid  (HTTP fetch)
- *   3. In-memory mock
+ *   1. GET /api/grid  (HTTP fetch; API route handles ISO-NE → DB → mock internally)
+ *   2. In-memory mock
  */
 export async function fetchGridStatus(opts?: {
   signal?: AbortSignal;
 }): Promise<GridStatusResponse> {
-  // ── 1. DB (server-side only) ──────────────────────────────────────────────
-  if (typeof window === "undefined") {
-    try {
-      const dbLoad = await fetchGridLoadFromDb();
-      if (dbLoad) {
-        return {
-          currentLoad: dbLoad.currentLoad,
-          peakCapacityMW: MOCK_GRID_STATUS.peakCapacityMW,
-          utilizationPct:
-            Math.round(
-              (dbLoad.currentLoad / MOCK_GRID_STATUS.peakCapacityMW) * 1000
-            ) / 10,
-          substationSummary: MOCK_GRID_STATUS.substationSummary,
-          dcQueueMW: MOCK_GRID_STATUS.dcQueueMW,
-          source: dbLoad.source,
-          timestamp: dbLoad.timestamp,
-        };
-      }
-    } catch (dbErr) {
-      if (dbErr instanceof DOMException && dbErr.name === "AbortError") throw dbErr;
-    }
-  }
-
-  // ── 2. API route ──────────────────────────────────────────────────────────
+  // ── 1. API route ──────────────────────────────────────────────────────────
   try {
     return await fetchWithRetry<GridStatusResponse>("/api/grid", {
       signal: opts?.signal,
@@ -82,7 +47,7 @@ export async function fetchGridStatus(opts?: {
     if (apiErr instanceof DOMException && apiErr.name === "AbortError") throw apiErr;
   }
 
-  // ── 3. Mock fallback ──────────────────────────────────────────────────────
+  // ── 2. Mock fallback ──────────────────────────────────────────────────────
   return { ...MOCK_GRID_STATUS, timestamp: new Date().toISOString() };
 }
 
