@@ -9,6 +9,7 @@ import {
   Map,
   Server,
   Settings,
+  Sparkles,
   TrendingUp,
   Zap,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const sidebarNav = [
   { id: "datacenters", label: "Data Center Queue", icon: Building2 },
   { id: "map", label: "Territory Map", icon: Map },
   { id: "forecast", label: "Load Forecast", icon: TrendingUp },
+  { id: "copilot", label: "AI Copilot", icon: Sparkles },
 ] as const;
 
 export type EnterpriseSection = (typeof sidebarNav)[number]["id"];

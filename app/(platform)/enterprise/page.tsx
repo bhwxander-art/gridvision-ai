@@ -26,6 +26,7 @@ import { useSubstationData } from "@/lib/hooks/use-substation-data";
 import { useDataCenterQueue } from "@/lib/hooks/use-datacenter-queue";
 import { useForecast } from "@/lib/hooks/use-forecast";
 import { ForecastPanel } from "@/components/enterprise/forecast-panel";
+import { CopilotPanel } from "@/components/enterprise/copilot-panel";
 
 function DataBadge({ provenance }: { provenance: ProvenanceInfo | null }) {
   if (!provenance) return null;
@@ -220,6 +221,7 @@ export default function EnterprisePlanningPage() {
           {section === "map" && (
             <EnterpriseTerritoryMap
               portfolio={substationData.portfolio}
+              queue={queue}
               config={substationData.config}
             />
           )}
@@ -232,6 +234,15 @@ export default function EnterprisePlanningPage() {
             ) : (
               <ForecastPanel data={forecast} />
             )
+          )}
+
+          {section === "copilot" && (
+            <CopilotPanel
+              portfolio={substationData.portfolio}
+              queue={queue}
+              forecast={forecast}
+              config={substationData.config}
+            />
           )}
         </div>
       )}
