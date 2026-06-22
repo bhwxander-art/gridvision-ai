@@ -21,12 +21,15 @@ function toSavedScenario(row: DbScenario): SavedScenario {
 export class ScenarioRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  async findAll(): Promise<SavedScenario[]> {
-    const { data, error } = await this.client
+  async findAll(userId: string | null): Promise<SavedScenario[]> {
+    let query = this.client
       .from("scenarios")
       .select("*")
       .order("created_at", { ascending: false });
 
+    if (userId) query = query.eq("user_id", userId);
+
+    const { data, error } = await query;
     if (error) throw new Error(`[ScenarioRepository.findAll] ${error.message}`);
     return (data as DbScenario[]).map(toSavedScenario);
   }
@@ -42,12 +45,11 @@ export class ScenarioRepository {
     return toSavedScenario(data as DbScenario);
   }
 
-  async delete(id: string): Promise<void> {
-    const { error } = await this.client
-      .from("scenarios")
-      .delete()
-      .eq("id", id);
+  async delete(id: string, userId: string | null): Promise<void> {
+    let query = this.client.from("scenarios").delete().eq("id", id);
+    if (userId) query = query.eq("user_id", userId);
 
+    const { error } = await query;
     if (error) throw new Error(`[ScenarioRepository.delete] ${error.message}`);
   }
 }

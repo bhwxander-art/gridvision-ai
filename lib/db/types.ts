@@ -101,6 +101,7 @@ export type DbForecastRunInsert = Omit<DbForecastRun, "id" | "created_at">;
 
 export interface DbScenario {
   id: string;          // UUID
+  user_id: string | null;
   name: string;
   inputs: {
     dataCenterLoadMW: number;

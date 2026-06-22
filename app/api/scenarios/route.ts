@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { ScenarioRepository, type SavedScenario } from "@/lib/db/repositories/scenario.repository";
+import { getAuthServerClient } from "@/lib/auth/server";
+
+async function getCurrentUserId(): Promise<string | null> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return null;
+  }
+  try {
+    const auth = await getAuthServerClient();
+    const { data: { user } } = await auth.auth.getUser();
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(): Promise<NextResponse<SavedScenario[] | { error: string }>> {
   if (!isDbConfigured()) {
@@ -8,8 +22,9 @@ export async function GET(): Promise<NextResponse<SavedScenario[] | { error: str
   }
 
   try {
+    const userId = await getCurrentUserId();
     const repo = new ScenarioRepository(getServerClient());
-    const scenarios = await repo.findAll();
+    const scenarios = await repo.findAll(userId);
     return NextResponse.json(scenarios);
   } catch (err) {
     console.error("[api/scenarios GET]", err);
@@ -40,8 +55,10 @@ export async function POST(
   }
 
   try {
+    const userId = await getCurrentUserId();
     const repo = new ScenarioRepository(getServerClient());
     const saved = await repo.save({
+      user_id: userId,
       name: name.trim(),
       inputs: inputs as SavedScenario["inputs"],
     });
