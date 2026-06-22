@@ -74,9 +74,12 @@ interface RawLocalPeakForecastResponse {
 
 // ── Mock fallback data ─────────────────────────────────────────────────────
 
+// Representative Eastern MA territory load for a typical planning day (~83% of peak).
+// Note: live adapter should fetch zone-level load via /fiveminuteload/{zoneId}, not
+// /fiveminutesystemload which returns ISO-NE system-wide load (~14,000+ MW).
 const MOCK_GRID_LOAD: GridLoad = {
   source: "ISO New England (mock)",
-  currentLoad: 14842,
+  currentLoadMW: 3_984,
   timestamp: new Date().toISOString(),
 };
 
@@ -153,13 +156,18 @@ async function isoneFetch<T>(
   }
 }
 
-function buildProvenance(quality: DataProvenance["dataQuality"]): DataProvenance {
+function buildProvenance(quality: DataProvenance["dataQuality"], endpoint = ""): DataProvenance {
   return {
     sourceName: ISONE_TERRITORY_NAME,
-    sourceUrl: BASE_URL,
+    sourceUrl: endpoint ? `${BASE_URL}${endpoint}` : BASE_URL,
     fetchedAt: new Date().toISOString(),
     dataQuality: quality,
   };
+}
+
+/** Returns true when ISO-NE credentials are present in the environment. */
+function hasCredentials(): boolean {
+  return Boolean(process.env.ISONE_API_USER && process.env.ISONE_API_PASSWORD);
 }
 
 // ── Transformation functions (pure — no I/O) ──────────────────────────────
@@ -179,7 +187,7 @@ export function transformHourlyLoad(
   const latest = records[0];
   return {
     source: "ISO New England",
-    currentLoad: latest.NativeLoadMw,
+    currentLoadMW: latest.NativeLoadMw,
     timestamp: new Date(latest.BeginDate).toISOString(),
   };
 }
@@ -198,7 +206,7 @@ export function transformFiveMinLoad(
   const latest = records[0];
   return {
     source: "ISO New England (5-min)",
-    currentLoad: latest.Mw,
+    currentLoadMW: latest.Mw,
     timestamp: new Date(latest.BeginDate).toISOString(),
   };
 }
@@ -258,41 +266,41 @@ export function transformLocalPeakForecast(
 export async function fetchISONeGridLoad(opts?: {
   signal?: AbortSignal;
 }): Promise<GridLoad & { provenance: DataProvenance }> {
+  // Fast-path: return mock immediately when credentials are not configured.
+  // Avoids two noisy catch-and-warn cycles for a known/expected condition.
+  if (!hasCredentials()) {
+    return {
+      ...MOCK_GRID_LOAD,
+      timestamp: new Date().toISOString(),
+      provenance: buildProvenance("mock"),
+    };
+  }
+
   // 1. Try 5-minute load (freshest available)
+  const FIVE_MIN_PATH = "/fiveminutesystemload/current";
   try {
-    const raw = await isoneFetch<RawFiveMinLoadResponse>(
-      "/fiveminutesystemload/current",
-      opts?.signal
-    );
+    const raw = await isoneFetch<RawFiveMinLoadResponse>(FIVE_MIN_PATH, opts?.signal);
     return {
       ...transformFiveMinLoad(raw),
-      provenance: buildProvenance("live"),
+      provenance: buildProvenance("live", FIVE_MIN_PATH),
     };
   } catch (fiveMinErr) {
-    if (
-      fiveMinErr instanceof DOMException &&
-      fiveMinErr.name === "AbortError"
-    ) {
+    if (fiveMinErr instanceof DOMException && fiveMinErr.name === "AbortError") {
       throw fiveMinErr;
     }
     console.warn("[isone.adapter] 5-min load failed, trying hourly:", fiveMinErr);
   }
 
   // 2. Fall back to hourly load
+  const HOURLY_PATH = "/currenthourlyload";
   try {
-    const raw = await isoneFetch<RawHourlyLoadResponse>(
-      "/currenthourlyload",
-      opts?.signal
-    );
+    const raw = await isoneFetch<RawHourlyLoadResponse>(HOURLY_PATH, opts?.signal);
     return {
       ...transformHourlyLoad(raw),
-      provenance: buildProvenance("live"),
+      provenance: buildProvenance("live", HOURLY_PATH),
     };
   } catch (hourlyErr) {
-    if (
-      hourlyErr instanceof DOMException &&
-      hourlyErr.name === "AbortError"
-    ) {
+    if (hourlyErr instanceof DOMException && hourlyErr.name === "AbortError") {
       throw hourlyErr;
     }
     console.warn("[isone.adapter] Hourly load failed, using mock:", hourlyErr);
@@ -313,14 +321,20 @@ export async function fetchISONeGridLoad(opts?: {
 export async function fetchISONeLoadForecast(opts?: {
   signal?: AbortSignal;
 }): Promise<TerritoryLoadForecast & { provenance: DataProvenance }> {
+  if (!hasCredentials()) {
+    return {
+      ...MOCK_LOAD_FORECAST,
+      forecastedAt: new Date().toISOString(),
+      provenance: buildProvenance("mock"),
+    };
+  }
+
+  const FORECAST_PATH = "/hourlylocalpeakforecast";
   try {
-    const raw = await isoneFetch<RawLocalPeakForecastResponse>(
-      "/hourlylocalpeakforecast",
-      opts?.signal
-    );
+    const raw = await isoneFetch<RawLocalPeakForecastResponse>(FORECAST_PATH, opts?.signal);
     return {
       ...transformLocalPeakForecast(raw),
-      provenance: buildProvenance("live"),
+      provenance: buildProvenance("live", FORECAST_PATH),
     };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;

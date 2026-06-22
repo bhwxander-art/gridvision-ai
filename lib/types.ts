@@ -3,7 +3,7 @@ import type { PlanningHorizon, DataCenterInterconnection } from "@/lib/planning-
 // ── Core grid types ────────────────────────────────────────────────────────
 export interface GridLoad {
   source: string;
-  currentLoad: number;
+  currentLoadMW: number;
   timestamp: string;
 }
 
@@ -96,8 +96,9 @@ export interface AnalyticsData {
 
 /** Returned by GET /api/grid */
 export interface GridStatusResponse {
-  currentLoad: number;
-  peakCapacityMW: number;
+  currentLoadMW: number;
+  peakSystemLoadMW: number;
+  systemCapacityMW: number;
   utilizationPct: number;
   substationSummary: {
     total: number;
@@ -109,6 +110,7 @@ export interface GridStatusResponse {
   timestamp: string;
   freshness: "live" | "delayed" | "mock";
   isMock: boolean;
+  _provenance: import("@/lib/provenance").ProvenanceInfo;
 }
 
 /** Returned by GET /api/datacenters */

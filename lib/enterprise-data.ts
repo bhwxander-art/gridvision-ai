@@ -11,6 +11,11 @@ export const planningTerritory = {
   peakSystemLoadMW: 4820,
 };
 
+// Eastern Massachusetts total installed capacity (generation + import capability)
+// with ISO-NE N-1 reserve margin applied. Single source of truth shared by the
+// forecast engine and the grid-status route.
+export const TERRITORY_CAPACITY_MW = 6_500;
+
 export const substationPortfolio: SubstationPlan[] = [
   {
     id: "ss-boston-north",

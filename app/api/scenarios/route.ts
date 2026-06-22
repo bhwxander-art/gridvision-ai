@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { ScenarioRepository, type SavedScenario } from "@/lib/db/repositories/scenario.repository";
 import { getAuthServerClient } from "@/lib/auth/server";
+import { SaveScenarioSchema, validationError } from "@/lib/validation";
+import { getRateLimitKey, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 async function getCurrentUserId(): Promise<string | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -39,28 +41,31 @@ export async function POST(
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  let body: { name?: string; inputs?: unknown };
+  let raw: unknown;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { name, inputs } = body;
-  if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  const parsed = SaveScenarioSchema.safeParse(raw);
+  if (!parsed.success) {
+    return validationError(parsed.error.issues);
   }
-  if (!inputs || typeof inputs !== "object") {
-    return NextResponse.json({ error: "inputs is required" }, { status: 400 });
+
+  const { name, inputs } = parsed.data;
+
+  const userId = await getCurrentUserId();
+  if (!checkRateLimit(getRateLimitKey(userId, req))) {
+    return rateLimitResponse();
   }
 
   try {
-    const userId = await getCurrentUserId();
     const repo = new ScenarioRepository(getServerClient());
     const saved = await repo.save({
       user_id: userId,
-      name: name.trim(),
-      inputs: inputs as SavedScenario["inputs"],
+      name,
+      inputs,
     });
     return NextResponse.json(saved, { status: 201 });
   } catch (err) {

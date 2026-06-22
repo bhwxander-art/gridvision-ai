@@ -4,6 +4,7 @@ import {
   substationPortfolio,
   dataCenterQueue,
   planningTerritory,
+  TERRITORY_CAPACITY_MW,
 } from "@/lib/enterprise-data";
 import { assessSubstationCapacity } from "@/lib/planning-engine";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
@@ -11,14 +12,19 @@ import { GridLoadRepository } from "@/lib/db/repositories/grid-load.repository";
 import { fetchISONeGridLoad } from "@/lib/adapters/isone.adapter";
 import { makeProvenance, mockProvenance } from "@/lib/provenance";
 
-function buildBaseStatus(): Omit<GridStatusResponse, "source" | "timestamp" | "freshness" | "isMock"> {
+// Representative Eastern MA territory load for the static/mock path.
+// Replace with zone-level ISO-NE fetch (/fiveminuteload/{zoneId}) for live data.
+const TERRITORY_MOCK_LOAD_MW = 3_984;
+
+function buildBaseStatus(): Omit<GridStatusResponse, "source" | "timestamp" | "freshness" | "isMock" | "_provenance"> {
   const results = substationPortfolio.map((ss) =>
     assessSubstationCapacity(ss, planningTerritory.planningHorizonYears)
   );
   return {
-    currentLoad: 16842,
-    peakCapacityMW: planningTerritory.peakSystemLoadMW,
-    utilizationPct: Math.round((16842 / planningTerritory.peakSystemLoadMW) * 1000) / 10,
+    currentLoadMW: TERRITORY_MOCK_LOAD_MW,
+    peakSystemLoadMW: planningTerritory.peakSystemLoadMW,
+    systemCapacityMW: TERRITORY_CAPACITY_MW,
+    utilizationPct: Math.round((TERRITORY_MOCK_LOAD_MW / TERRITORY_CAPACITY_MW) * 1000) / 10,
     substationSummary: {
       total: substationPortfolio.length,
       constrained: results.filter((r) => r.severity === "constrained").length,
@@ -30,7 +36,7 @@ function buildBaseStatus(): Omit<GridStatusResponse, "source" | "timestamp" | "f
 
 function mergeLoad(
   base: ReturnType<typeof buildBaseStatus>,
-  currentLoad: number,
+  currentLoadMW: number,
   source: string,
   timestamp: string,
   isMock: boolean
@@ -38,12 +44,13 @@ function mergeLoad(
   const prov = makeProvenance(source, timestamp, isMock);
   return {
     ...base,
-    currentLoad,
-    utilizationPct: Math.round((currentLoad / base.peakCapacityMW) * 1000) / 10,
+    currentLoadMW,
+    utilizationPct: Math.round((currentLoadMW / base.systemCapacityMW) * 1000) / 10,
     source,
     timestamp,
     freshness: prov.freshness,
     isMock,
+    _provenance: prov,
   };
 }
 
@@ -54,7 +61,7 @@ export async function GET(): Promise<NextResponse<GridStatusResponse>> {
   try {
     const iso = await fetchISONeGridLoad();
     return NextResponse.json(
-      mergeLoad(base, iso.currentLoad, iso.source, iso.timestamp, iso.provenance.dataQuality === "mock"),
+      mergeLoad(base, iso.currentLoadMW, iso.source, iso.timestamp, iso.provenance.dataQuality === "mock"),
       { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=600", "X-Data-Source": iso.provenance.dataQuality } }
     );
   } catch {
@@ -68,7 +75,7 @@ export async function GET(): Promise<NextResponse<GridStatusResponse>> {
       const latest = await repo.getLatest();
       if (latest) {
         return NextResponse.json(
-          mergeLoad(base, latest.currentLoad, latest.source, latest.timestamp, false),
+          mergeLoad(base, latest.currentLoadMW, latest.source, latest.timestamp, false),
           { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=60", "X-Data-Source": "db" } }
         );
       }
@@ -80,7 +87,7 @@ export async function GET(): Promise<NextResponse<GridStatusResponse>> {
   // ── 3. Mock fallback ────────────────────────────────────────────────────────
   const prov = mockProvenance("GridVision");
   return NextResponse.json(
-    { ...base, currentLoad: 16842, source: prov.source, timestamp: prov.timestamp, freshness: "mock" as const, isMock: true },
+    { ...base, source: prov.source, timestamp: prov.timestamp, freshness: "mock" as const, isMock: true, _provenance: prov },
     { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=60", "X-Data-Source": "mock" } }
   );
 }

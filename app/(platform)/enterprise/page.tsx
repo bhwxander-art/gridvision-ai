@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/card";
 import { useSubstationData } from "@/lib/hooks/use-substation-data";
 import { useDataCenterQueue } from "@/lib/hooks/use-datacenter-queue";
+import { useForecast } from "@/lib/hooks/use-forecast";
+import { ForecastPanel } from "@/components/enterprise/forecast-panel";
 
 function DataBadge({ provenance }: { provenance: ProvenanceInfo | null }) {
   if (!provenance) return null;
@@ -87,6 +89,12 @@ export default function EnterprisePlanningPage() {
     loading: queueLoading,
     error: queueError,
   } = useDataCenterQueue();
+
+  const {
+    data: forecast,
+    loading: forecastLoading,
+    error: forecastError,
+  } = useForecast();
 
   const loading = ssLoading || queueLoading;
   const error = ssError ?? queueError;
@@ -214,6 +222,16 @@ export default function EnterprisePlanningPage() {
               portfolio={substationData.portfolio}
               config={substationData.config}
             />
+          )}
+
+          {section === "forecast" && (
+            forecastLoading ? (
+              <EnterpriseSkeleton />
+            ) : forecastError || !forecast ? (
+              <ErrorBanner message="Unable to load forecast data." />
+            ) : (
+              <ForecastPanel data={forecast} />
+            )
           )}
         </div>
       )}

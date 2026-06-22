@@ -34,7 +34,7 @@ async function checkISONE(): Promise<SourceStatus> {
     if (result.provenance.dataQuality === "mock") {
       return { name: "ISO New England", status: "mock", latencyMs, detail: "Credentials present but API returned mock fallback", checkedAt };
     }
-    return { name: "ISO New England", status: "live", latencyMs, detail: `Load: ${result.currentLoad.toLocaleString()} MW at ${result.timestamp}`, checkedAt };
+    return { name: "ISO New England", status: "live", latencyMs, detail: `Load: ${result.currentLoadMW.toLocaleString()} MW · ${result.source} · ${result.timestamp}`, checkedAt };
   } catch (err) {
     return { name: "ISO New England", status: "error", latencyMs: Date.now() - t0, detail: err instanceof Error ? err.message : String(err), checkedAt };
   }

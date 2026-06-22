@@ -1,5 +1,6 @@
 import type { GridLoad, AnalyticsData, GridStatusResponse } from "@/lib/types";
 import { fetchWithRetry } from "@/lib/api/retry";
+import { mockProvenance } from "@/lib/provenance";
 import {
   loadGrowthData,
   evImpactData,
@@ -10,15 +11,17 @@ import {
 // ── Fallback (mock) values ─────────────────────────────────────────────────
 
 const MOCK_GRID_STATUS: GridStatusResponse = {
-  currentLoad: 16842,
-  peakCapacityMW: 4820,
-  utilizationPct: 34.9,
+  currentLoadMW: 3_984,
+  peakSystemLoadMW: 4_820,
+  systemCapacityMW: 6_500,
+  utilizationPct: 61.3,
   substationSummary: { total: 4, constrained: 2, critical: 1 },
   dcQueueMW: 262,
   source: "GridVision (mock)",
   timestamp: new Date().toISOString(),
   freshness: "mock",
   isMock: true,
+  _provenance: mockProvenance("GridVision (mock)"),
 };
 
 const MOCK_ANALYTICS: AnalyticsData = {
@@ -61,7 +64,7 @@ export async function fetchGridLoad(opts?: {
   const status = await fetchGridStatus(opts);
   return {
     source: status.source,
-    currentLoad: status.currentLoad,
+    currentLoadMW: status.currentLoadMW,
     timestamp: status.timestamp,
   };
 }

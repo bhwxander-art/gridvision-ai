@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { ScenarioRepository } from "@/lib/db/repositories/scenario.repository";
 import { getAuthServerClient } from "@/lib/auth/server";
+import { getRateLimitKey, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 async function getCurrentUserId(): Promise<string | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -29,8 +30,12 @@ export async function DELETE(
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
+  const userId = await getCurrentUserId();
+  if (!checkRateLimit(getRateLimitKey(userId, _req))) {
+    return rateLimitResponse();
+  }
+
   try {
-    const userId = await getCurrentUserId();
     const repo = new ScenarioRepository(getServerClient());
     await repo.delete(id, userId);
     return NextResponse.json({ success: true });

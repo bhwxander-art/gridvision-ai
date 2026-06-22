@@ -8,7 +8,7 @@ import type { GridLoad } from "@/lib/types";
 function toGridLoad(row: DbGridLoadReading): GridLoad {
   return {
     source: row.source,
-    currentLoad: Number(row.load_mw),
+    currentLoadMW: Number(row.load_mw),
     timestamp: row.recorded_at,
   };
 }
