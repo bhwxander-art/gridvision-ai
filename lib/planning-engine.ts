@@ -37,8 +37,10 @@ export interface SubstationPlan {
   annualGrowthPct: number;
   transformers: TransformerAsset[];
   feeders: FeederCircuit[];
-  x: number;
-  y: number;
+  /** WGS-84 decimal degrees north */
+  latitude: number;
+  /** WGS-84 decimal degrees east (negative for western hemisphere) */
+  longitude: number;
 }
 
 export interface DataCenterInterconnection {

@@ -22,11 +22,11 @@ import {
   getSeverityColor,
   getSeverityLabel,
 } from "@/lib/planning-engine";
-import {
-  loadGrowthAssumptions,
-  substationPortfolio,
-  transformerLoadingTrend,
-} from "@/lib/enterprise-data";
+import type {
+  SubstationPlan,
+  TransformerLoadingPoint,
+  PlanningConfig,
+} from "@/lib/types";
 
 const chartTooltipStyle = {
   contentStyle: {
@@ -37,14 +37,24 @@ const chartTooltipStyle = {
   },
 };
 
-export function TransformerOverloadPanel() {
-  const allTransformers = substationPortfolio.flatMap((ss) => ss.transformers);
+interface TransformerOverloadPanelProps {
+  portfolio: SubstationPlan[];
+  trend: TransformerLoadingPoint[];
+  config: PlanningConfig;
+}
+
+export function TransformerOverloadPanel({
+  portfolio,
+  trend,
+  config,
+}: TransformerOverloadPanelProps) {
+  const allTransformers = portfolio.flatMap((ss) => ss.transformers);
   const results = allTransformers
     .map((tx) =>
       forecastTransformerOverload(
         tx,
-        loadGrowthAssumptions.evPenetrationGrowthPct,
-        loadGrowthAssumptions.dataCenterQueueMW / allTransformers.length
+        config.loadGrowthAssumptions.evPenetrationGrowthPct,
+        config.loadGrowthAssumptions.dataCenterQueueMW / allTransformers.length
       )
     )
     .sort((a, b) => b.replacementPriority - a.replacementPriority);
@@ -138,7 +148,7 @@ export function TransformerOverloadPanel() {
         <CardContent>
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={transformerLoadingTrend}>
+              <BarChart data={trend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 33% 14%)" />
                 <XAxis dataKey="year" stroke="hsl(215 20% 55%)" fontSize={11} />
                 <YAxis

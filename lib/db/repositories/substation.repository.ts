@@ -1,0 +1,131 @@
+import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  DbSubstation,
+  DbTransformer,
+  DbFeeder,
+  DbSubstationWithRelations,
+} from "@/lib/db/types";
+import type { SubstationPlan, FeederCircuit } from "@/lib/types";
+import type { TransformerAsset } from "@/lib/planning-engine";
+
+// ── Row → domain mappers (pure) ───────────────────────────────────────────────
+
+function toTransformer(row: DbTransformer): TransformerAsset {
+  return {
+    id: row.id,
+    substationId: row.substation_id,
+    name: row.name,
+    ratedMVA: Number(row.rated_mva),
+    peakLoadMVA: Number(row.peak_load_mva),
+    loadFactor: Number(row.load_factor),
+    ageYears: row.age_years,
+    n1Compliant: row.n1_compliant,
+  };
+}
+
+function toFeeder(row: DbFeeder): FeederCircuit {
+  return {
+    id: row.id,
+    substationId: row.substation_id,
+    name: row.name,
+    hostingCapacityMW: Number(row.hosting_capacity_mw),
+    committedLoadMW: Number(row.committed_load_mw),
+    queuedLoadMW: Number(row.queued_load_mw),
+  };
+}
+
+function toSubstationPlan(row: DbSubstationWithRelations): SubstationPlan {
+  return {
+    id: row.id,
+    name: row.name,
+    region: row.region,
+    voltageKV: Number(row.voltage_kv),
+    nameplateMVA: Number(row.nameplate_mva),
+    peakLoadMW: Number(row.peak_load_mw),
+    n1CapacityMW: Number(row.n1_capacity_mw),
+    annualGrowthPct: Number(row.annual_growth_pct),
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    transformers: (row.transformers ?? []).map(toTransformer),
+    feeders: (row.feeders ?? []).map(toFeeder),
+  };
+}
+
+// ── Domain → row mapper (for writes) ─────────────────────────────────────────
+
+function fromSubstationPlan(ss: SubstationPlan): Omit<DbSubstation, "created_at" | "updated_at"> {
+  return {
+    id: ss.id,
+    name: ss.name,
+    region: ss.region,
+    voltage_kv: ss.voltageKV,
+    nameplate_mva: ss.nameplateMVA,
+    peak_load_mw: ss.peakLoadMW,
+    n1_capacity_mw: ss.n1CapacityMW,
+    annual_growth_pct: ss.annualGrowthPct,
+    latitude: ss.latitude,
+    longitude: ss.longitude,
+  };
+}
+
+// ── Repository class ──────────────────────────────────────────────────────────
+
+export class SubstationRepository {
+  constructor(private readonly client: SupabaseClient) {}
+
+  /**
+   * Returns all substations with their transformers and feeders.
+   * Ordered alphabetically by name.
+   */
+  async findAll(): Promise<SubstationPlan[]> {
+    const { data, error } = await this.client
+      .from("substations")
+      .select("*, transformers(*), feeders(*)")
+      .order("name");
+
+    if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
+    return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
+  }
+
+  /**
+   * Returns a single substation with its transformers and feeders,
+   * or null if no matching row exists.
+   */
+  async findById(id: string): Promise<SubstationPlan | null> {
+    const { data, error } = await this.client
+      .from("substations")
+      .select("*, transformers(*), feeders(*)")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw new Error(`[SubstationRepository.findById] ${error.message}`);
+    if (!data) return null;
+    return toSubstationPlan(data as DbSubstationWithRelations);
+  }
+
+  /**
+   * Upserts a substation record (without its child transformers/feeders).
+   * Use TransformerRepository and FeederRepository to manage children.
+   */
+  async upsert(ss: SubstationPlan): Promise<void> {
+    const { error } = await this.client
+      .from("substations")
+      .upsert(fromSubstationPlan(ss), { onConflict: "id" });
+
+    if (error) throw new Error(`[SubstationRepository.upsert] ${error.message}`);
+  }
+
+  /**
+   * Updates only the real-time load reading for a substation.
+   * Called by SCADA ingestion pipelines.
+   */
+  async updatePeakLoad(id: string, peakLoadMW: number): Promise<void> {
+    const { error } = await this.client
+      .from("substations")
+      .update({ peak_load_mw: peakLoadMW })
+      .eq("id", id);
+
+    if (error) throw new Error(`[SubstationRepository.updatePeakLoad] ${error.message}`);
+  }
+}

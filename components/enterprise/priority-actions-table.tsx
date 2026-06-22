@@ -14,12 +14,12 @@ import {
   forecastTransformerOverload,
   getSeverityColor,
 } from "@/lib/planning-engine";
-import {
-  dataCenterQueue,
-  getFeederById,
-  planningTerritory,
-  substationPortfolio,
-} from "@/lib/enterprise-data";
+import type {
+  DataCenterInterconnection,
+  SubstationPlan,
+} from "@/lib/types";
+import type { PlanningTerritory } from "@/lib/types";
+import { findFeederById } from "@/lib/services/substation.service";
 
 interface PriorityAction {
   rank: number;
@@ -30,14 +30,15 @@ interface PriorityAction {
   capexM: number;
 }
 
-function buildPriorityActions(): PriorityAction[] {
+function buildPriorityActions(
+  portfolio: SubstationPlan[],
+  queue: DataCenterInterconnection[],
+  territory: PlanningTerritory
+): PriorityAction[] {
   const actions: PriorityAction[] = [];
 
-  substationPortfolio.forEach((ss) => {
-    const result = assessSubstationCapacity(
-      ss,
-      planningTerritory.planningHorizonYears
-    );
+  portfolio.forEach((ss) => {
+    const result = assessSubstationCapacity(ss, territory.planningHorizonYears);
     if (result.severity !== "normal") {
       actions.push({
         rank: 0,
@@ -55,7 +56,7 @@ function buildPriorityActions(): PriorityAction[] {
     }
   });
 
-  substationPortfolio.flatMap((ss) => ss.transformers).forEach((tx) => {
+  portfolio.flatMap((ss) => ss.transformers).forEach((tx) => {
     const result = forecastTransformerOverload(tx, 18, 40);
     if (result.overloadRisk !== "normal") {
       actions.push({
@@ -74,14 +75,10 @@ function buildPriorityActions(): PriorityAction[] {
     }
   });
 
-  dataCenterQueue.forEach((project) => {
-    const ctx = getFeederById(project.affectedFeederId);
+  queue.forEach((project) => {
+    const ctx = findFeederById(project.affectedFeederId, portfolio);
     if (!ctx) return;
-    const impact = analyzeDataCenterImpact(
-      project,
-      ctx.substation,
-      ctx.feeder
-    );
+    const impact = analyzeDataCenterImpact(project, ctx.substation, ctx.feeder);
     if (impact.constraintFlag) {
       actions.push({
         rank: 0,
@@ -104,8 +101,18 @@ function buildPriorityActions(): PriorityAction[] {
     .map((a, i) => ({ ...a, rank: i + 1 }));
 }
 
-export function PriorityActionsTable() {
-  const actions = buildPriorityActions();
+interface PriorityActionsTableProps {
+  portfolio: SubstationPlan[];
+  queue: DataCenterInterconnection[];
+  territory: PlanningTerritory;
+}
+
+export function PriorityActionsTable({
+  portfolio,
+  queue,
+  territory,
+}: PriorityActionsTableProps) {
+  const actions = buildPriorityActions(portfolio, queue, territory);
 
   return (
     <Card className="border-border/40 bg-[#0d1219]/80">
@@ -177,24 +184,28 @@ export function PriorityActionsTable() {
   );
 }
 
-export function computeEnterpriseKpis() {
-  const ssResults = substationPortfolio.map((ss) =>
-    assessSubstationCapacity(ss, planningTerritory.planningHorizonYears)
+export function computeEnterpriseKpis(
+  portfolio: SubstationPlan[],
+  queue: DataCenterInterconnection[],
+  territory: PlanningTerritory
+) {
+  const ssResults = portfolio.map((ss) =>
+    assessSubstationCapacity(ss, territory.planningHorizonYears)
   );
   const constrainedSubstations = ssResults.filter(
     (r) => r.severity === "constrained" || r.severity === "critical"
   ).length;
 
-  const txResults = substationPortfolio
+  const txResults = portfolio
     .flatMap((ss) => ss.transformers)
     .map((tx) => forecastTransformerOverload(tx, 18, 40));
   const criticalTransformers = txResults.filter(
     (r) => r.overloadRisk === "critical" || r.overloadRisk === "constrained"
   ).length;
 
-  const dcQueueMW = dataCenterQueue.reduce((s, d) => s + d.requestedMW, 0);
-  const constrainedDCProjects = dataCenterQueue.filter((p) => {
-    const ctx = getFeederById(p.affectedFeederId);
+  const dcQueueMW = queue.reduce((s, d) => s + d.requestedMW, 0);
+  const constrainedDCProjects = queue.filter((p) => {
+    const ctx = findFeederById(p.affectedFeederId, portfolio);
     if (!ctx) return false;
     return analyzeDataCenterImpact(p, ctx.substation, ctx.feeder).constraintFlag;
   }).length;

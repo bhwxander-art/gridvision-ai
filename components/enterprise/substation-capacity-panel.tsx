@@ -14,19 +14,26 @@ import {
   getSeverityLabel,
   type SubstationCapacityResult,
 } from "@/lib/planning-engine";
-import {
-  planningTerritory,
-  substationPortfolio,
-} from "@/lib/enterprise-data";
+import type { SubstationPlan, PlanningConfig } from "@/lib/types";
 import { formatMW } from "@/lib/utils";
 
-export function SubstationCapacityPanel() {
-  const results: (SubstationCapacityResult & { name: string; region: string })[] =
-    substationPortfolio.map((ss) => ({
-      ...assessSubstationCapacity(ss, planningTerritory.planningHorizonYears),
-      name: ss.name,
-      region: ss.region,
-    }));
+interface SubstationCapacityPanelProps {
+  portfolio: SubstationPlan[];
+  config: PlanningConfig;
+}
+
+export function SubstationCapacityPanel({
+  portfolio,
+  config,
+}: SubstationCapacityPanelProps) {
+  const results: (SubstationCapacityResult & {
+    name: string;
+    region: string;
+  })[] = portfolio.map((ss) => ({
+    ...assessSubstationCapacity(ss, config.territory.planningHorizonYears),
+    name: ss.name,
+    region: ss.region,
+  }));
 
   return (
     <Card className="border-border/40 bg-[#0d1219]/80">
@@ -34,7 +41,7 @@ export function SubstationCapacityPanel() {
         <CardTitle>Substation Capacity Planning</CardTitle>
         <CardDescription>
           N-1 headroom, utilization, and years-to-constraint by station ·{" "}
-          {planningTerritory.planningHorizonYears}-year horizon
+          {config.territory.planningHorizonYears}-year horizon
         </CardDescription>
       </CardHeader>
       <CardContent>

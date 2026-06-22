@@ -9,7 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { analyzeDataCenterImpact } from "@/lib/planning-engine";
-import { dataCenterQueue, getFeederById } from "@/lib/enterprise-data";
+import type { DataCenterInterconnection, SubstationPlan } from "@/lib/types";
+import { findFeederById } from "@/lib/services/substation.service";
 import { formatMW } from "@/lib/utils";
 
 const statusLabels = {
@@ -19,21 +20,27 @@ const statusLabels = {
   energized: "Energized",
 };
 
-export function DataCenterImpactPanel() {
-  const results = dataCenterQueue.map((project) => {
-    const ctx = getFeederById(project.affectedFeederId);
-    if (!ctx) return null;
-    return {
-      project,
-      impact: analyzeDataCenterImpact(
+interface DataCenterImpactPanelProps {
+  queue: DataCenterInterconnection[];
+  portfolio: SubstationPlan[];
+}
+
+export function DataCenterImpactPanel({
+  queue,
+  portfolio,
+}: DataCenterImpactPanelProps) {
+  const results = queue
+    .map((project) => {
+      const ctx = findFeederById(project.affectedFeederId, portfolio);
+      if (!ctx) return null;
+      return {
         project,
-        ctx.substation,
-        ctx.feeder
-      ),
-      substationName: ctx.substation.name,
-      feederName: ctx.feeder.name,
-    };
-  }).filter(Boolean);
+        impact: analyzeDataCenterImpact(project, ctx.substation, ctx.feeder),
+        substationName: ctx.substation.name,
+        feederName: ctx.feeder.name,
+      };
+    })
+    .filter(Boolean);
 
   return (
     <Card className="border-border/40 bg-[#0d1219]/80">

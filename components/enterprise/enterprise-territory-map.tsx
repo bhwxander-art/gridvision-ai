@@ -10,20 +10,29 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn, formatMW } from "@/lib/utils";
-
 import {
   assessSubstationCapacity,
   getSeverityColor,
   getSeverityLabel,
   type SubstationPlan,
 } from "@/lib/planning-engine";
-
+import type { PlanningConfig } from "@/lib/types";
 import {
-  planningTerritory,
-  substationPortfolio,
-} from "@/lib/enterprise-data";
+  geoToCssPercent,
+  geoToSVGPoint,
+  BOSTON_METRO_BOUNDS,
+  formatCoordinates,
+} from "@/lib/gis/projection";
 
-export function EnterpriseTerritoryMap() {
+interface EnterpriseTerritoryMapProps {
+  portfolio: SubstationPlan[];
+  config: PlanningConfig;
+}
+
+export function EnterpriseTerritoryMap({
+  portfolio,
+  config,
+}: EnterpriseTerritoryMapProps) {
   const [selected, setSelected] = useState<SubstationPlan | null>(null);
 
   return (
@@ -42,32 +51,68 @@ export function EnterpriseTerritoryMap() {
               className="absolute inset-0 h-full w-full"
               viewBox="0 0 100 70"
             >
+              {/* Land outline */}
               <path
                 d="M 5 15 Q 20 8 40 12 Q 60 10 75 18 Q 82 30 78 45 Q 70 58 50 62 Q 30 65 10 55 Q 3 40 5 15 Z"
                 fill="hsl(217 33% 8%)"
                 stroke="hsl(217 33% 16%)"
                 strokeWidth="0.4"
               />
+
+              {/* Transmission lines — computed from real coordinates */}
+              {[
+                ["ss-waltham-west", "ss-cambridge-central"],
+                ["ss-cambridge-central", "ss-somerville-east"],
+                ["ss-cambridge-central", "ss-boston-north"],
+                ["ss-somerville-east", "ss-boston-north"],
+              ].map(([fromId, toId]) => {
+                const from = portfolio.find((s) => s.id === fromId);
+                const to = portfolio.find((s) => s.id === toId);
+                if (!from || !to) return null;
+                const fromPt = geoToSVGPoint(
+                  from.latitude,
+                  from.longitude,
+                  BOSTON_METRO_BOUNDS
+                );
+                const toPt = geoToSVGPoint(
+                  to.latitude,
+                  to.longitude,
+                  BOSTON_METRO_BOUNDS
+                );
+                return (
+                  <line
+                    key={`${fromId}-${toId}`}
+                    x1={fromPt.x}
+                    y1={fromPt.y}
+                    x2={toPt.x}
+                    y2={toPt.y}
+                    stroke="hsl(187 85% 53% / 0.3)"
+                    strokeWidth="0.3"
+                    strokeDasharray="1 1"
+                  />
+                );
+              })}
             </svg>
 
-            {substationPortfolio.map((ss) => {
+            {portfolio.map((ss) => {
               const assessment = assessSubstationCapacity(
                 ss,
-                planningTerritory.planningHorizonYears
+                config.territory.planningHorizonYears
               );
-
               const color = getSeverityColor(assessment.severity);
               const isSelected = selected?.id === ss.id;
+              const { xPct, yPct } = geoToCssPercent(
+                ss.latitude,
+                ss.longitude,
+                BOSTON_METRO_BOUNDS
+              );
 
               return (
                 <button
                   key={ss.id}
                   type="button"
                   className="absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    left: `${ss.x}%`,
-                    top: `${ss.y}%`,
-                  }}
+                  style={{ left: `${xPct}%`, top: `${yPct}%` }}
                   onClick={() => setSelected(ss)}
                 >
                   <div
@@ -83,12 +128,9 @@ export function EnterpriseTerritoryMap() {
                   >
                     <div
                       className="h-3 w-3 rounded-full"
-                      style={{
-                        backgroundColor: color,
-                      }}
+                      style={{ backgroundColor: color }}
                     />
                   </div>
-
                   <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[10px]">
                     {ss.name}
                   </span>
@@ -104,7 +146,6 @@ export function EnterpriseTerritoryMap() {
           <CardTitle className="text-base">
             {selected ? selected.name : "Select Substation"}
           </CardTitle>
-
           {selected && (
             <CardDescription>{selected.region}</CardDescription>
           )}
@@ -115,7 +156,7 @@ export function EnterpriseTerritoryMap() {
             (() => {
               const assessment = assessSubstationCapacity(
                 selected,
-                planningTerritory.planningHorizonYears
+                config.territory.planningHorizonYears
               );
 
               return (
@@ -136,18 +177,21 @@ export function EnterpriseTerritoryMap() {
                   </div>
 
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      N-1 Headroom
-                    </span>
+                    <span className="text-muted-foreground">N-1 Headroom</span>
                     <span>{formatMW(assessment.n1HeadroomMW)}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Coordinates</span>
+                    <span className="font-mono text-xs">
+                      {formatCoordinates(selected.latitude, selected.longitude)}
+                    </span>
                   </div>
 
                   <Badge
                     variant="outline"
                     style={{
-                      borderColor: `${getSeverityColor(
-                        assessment.severity
-                      )}44`,
+                      borderColor: `${getSeverityColor(assessment.severity)}44`,
                       color: getSeverityColor(assessment.severity),
                     }}
                   >

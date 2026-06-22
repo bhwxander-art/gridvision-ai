@@ -16,8 +16,10 @@ export interface Substation {
   status: "normal" | "warning" | "capacity-risk";
   load: number;
   capacity: number;
-  x: number;
-  y: number;
+  /** WGS-84 decimal degrees north */
+  latitude: number;
+  /** WGS-84 decimal degrees east (negative for western hemisphere) */
+  longitude: number;
   region: string;
 }
 
@@ -52,8 +54,8 @@ export const substations: Substation[] = [
     status: "normal",
     load: 342,
     capacity: 450,
-    x: 72,
-    y: 28,
+    latitude: 42.4671,
+    longitude: -70.9437,
     region: "North Shore",
   },
   {
@@ -62,8 +64,8 @@ export const substations: Substation[] = [
     status: "warning",
     load: 398,
     capacity: 420,
-    x: 48,
-    y: 42,
+    latitude: 42.3626,
+    longitude: -71.0857,
     region: "Metro West",
   },
   {
@@ -72,8 +74,8 @@ export const substations: Substation[] = [
     status: "capacity-risk",
     load: 287,
     capacity: 290,
-    x: 58,
-    y: 22,
+    latitude: 42.3898,
+    longitude: -71.0747,
     region: "Inner Metro",
   },
   {
@@ -82,8 +84,8 @@ export const substations: Substation[] = [
     status: "normal",
     load: 215,
     capacity: 380,
-    x: 22,
-    y: 55,
+    latitude: 42.3765,
+    longitude: -71.2356,
     region: "Route 128 Corridor",
   },
 ];

@@ -24,7 +24,7 @@ import {
   getRiskColor,
   type RiskLevel,
 } from "@/lib/forecast";
-import { defaultForecastInputs } from "@/lib/sample-data";
+import { defaultForecastInputs } from "@/lib/config";
 import { formatMW, formatPercent } from "@/lib/utils";
 
 function getRiskBadgeVariant(
@@ -79,13 +79,7 @@ export default function DashboardPage() {
       evGrowthRate: ev,
       dataCenterLoad: dc,
     });
-  }, [
-    cityName,
-    currentPeakLoad,
-    populationGrowthRate,
-    evGrowthRate,
-    dataCenterLoad,
-  ]);
+  }, [cityName, currentPeakLoad, populationGrowthRate, evGrowthRate, dataCenterLoad]);
 
   const RiskIcon = getRiskIcon(result.riskLevel);
 
@@ -180,12 +174,16 @@ export default function DashboardPage() {
               className="w-full"
               onClick={() => {
                 setCityName(defaultForecastInputs.cityName);
-                setCurrentPeakLoad(String(defaultForecastInputs.currentPeakLoad));
+                setCurrentPeakLoad(
+                  String(defaultForecastInputs.currentPeakLoad)
+                );
                 setPopulationGrowthRate(
                   String(defaultForecastInputs.populationGrowthRate)
                 );
                 setEvGrowthRate(String(defaultForecastInputs.evGrowthRate));
-                setDataCenterLoad(String(defaultForecastInputs.dataCenterLoad));
+                setDataCenterLoad(
+                  String(defaultForecastInputs.dataCenterLoad)
+                );
               }}
               variant="outline"
             >

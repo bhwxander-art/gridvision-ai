@@ -21,8 +21,8 @@ export const substationPortfolio: SubstationPlan[] = [
     peakLoadMW: 342,
     n1CapacityMW: 405,
     annualGrowthPct: 3.2,
-    x: 72,
-    y: 28,
+    latitude: 42.4671,
+    longitude: -70.9437,
     transformers: [
       {
         id: "tx-bn-1",
@@ -65,8 +65,8 @@ export const substationPortfolio: SubstationPlan[] = [
     peakLoadMW: 398,
     n1CapacityMW: 378,
     annualGrowthPct: 4.8,
-    x: 48,
-    y: 42,
+    latitude: 42.3626,
+    longitude: -71.0857,
     transformers: [
       {
         id: "tx-cc-1",
@@ -109,8 +109,8 @@ export const substationPortfolio: SubstationPlan[] = [
     peakLoadMW: 287,
     n1CapacityMW: 261,
     annualGrowthPct: 5.6,
-    x: 58,
-    y: 22,
+    latitude: 42.3898,
+    longitude: -71.0747,
     transformers: [
       {
         id: "tx-se-1",
@@ -143,8 +143,8 @@ export const substationPortfolio: SubstationPlan[] = [
     peakLoadMW: 215,
     n1CapacityMW: 342,
     annualGrowthPct: 6.2,
-    x: 22,
-    y: 55,
+    latitude: 42.3765,
+    longitude: -71.2356,
     transformers: [
       {
         id: "tx-ww-1",

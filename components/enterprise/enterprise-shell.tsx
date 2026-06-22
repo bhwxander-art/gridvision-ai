@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { planningTerritory } from "@/lib/enterprise-data";
+import type { PlanningTerritory } from "@/lib/types";
 
 const sidebarNav = [
   { id: "overview", label: "Command Center", icon: LayoutDashboard },
@@ -28,12 +28,14 @@ interface EnterpriseShellProps {
   activeSection: EnterpriseSection;
   onSectionChange: (section: EnterpriseSection) => void;
   children: React.ReactNode;
+  territory?: PlanningTerritory;
 }
 
 export function EnterpriseShell({
   activeSection,
   onSectionChange,
   children,
+  territory,
 }: EnterpriseShellProps) {
   return (
     <div className="flex min-h-screen bg-[#070b12]">
@@ -111,20 +113,27 @@ export function EnterpriseShell({
             </select>
             <div className="hidden lg:block">
               <p className="text-sm font-medium">
-                {planningTerritory.operatingCompany}
+                {territory?.operatingCompany ?? "—"}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {planningTerritory.name} · {planningTerritory.planningHorizonYears}-Year Horizon
+                {territory
+                  ? `${territory.name} · ${territory.planningHorizonYears}-Year Horizon`
+                  : "Loading…"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
             <span className="hidden sm:inline">
-              Model run:{" "}
-              {new Date(planningTerritory.lastModelRun).toLocaleDateString(
-                "en-US",
-                { month: "short", day: "numeric", year: "numeric" }
+              {territory && (
+                <>
+                  Model run:{" "}
+                  {new Date(territory.lastModelRun).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </>
               )}
             </span>
             <span className="flex items-center gap-1.5">
