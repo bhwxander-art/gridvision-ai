@@ -20,6 +20,8 @@
  */
 
 import type { GridLoad, TerritoryLoadForecast, DataProvenance } from "@/lib/domain/models";
+import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { GridLoadRepository } from "@/lib/db/repositories/grid-load.repository";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -253,6 +255,28 @@ export function transformLocalPeakForecast(
   };
 }
 
+// ── Database fallback ──────────────────────────────────────────────────────
+
+/**
+ * Reads the most recent load reading stored in grid_load_history.
+ * Used as a fallback when the live ISO-NE API is unavailable.
+ * Returns null if the DB is not configured or the table is empty.
+ */
+async function tryDbLoad(): Promise<(GridLoad & { provenance: DataProvenance }) | null> {
+  if (!isDbConfigured()) return null;
+  try {
+    const repo = new GridLoadRepository(getServerClient());
+    const latest = await repo.getLatest("eastern-ma");
+    if (!latest) return null;
+    return {
+      ...latest,
+      provenance: buildProvenance("cache"),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Public fetch functions ─────────────────────────────────────────────────
 
 /**
@@ -266,9 +290,10 @@ export function transformLocalPeakForecast(
 export async function fetchISONeGridLoad(opts?: {
   signal?: AbortSignal;
 }): Promise<GridLoad & { provenance: DataProvenance }> {
-  // Fast-path: return mock immediately when credentials are not configured.
-  // Avoids two noisy catch-and-warn cycles for a known/expected condition.
+  // No credentials — try DB before falling back to hardcoded mock.
   if (!hasCredentials()) {
+    const dbLoad = await tryDbLoad();
+    if (dbLoad) return dbLoad;
     return {
       ...MOCK_GRID_LOAD,
       timestamp: new Date().toISOString(),
@@ -303,10 +328,14 @@ export async function fetchISONeGridLoad(opts?: {
     if (hourlyErr instanceof DOMException && hourlyErr.name === "AbortError") {
       throw hourlyErr;
     }
-    console.warn("[isone.adapter] Hourly load failed, using mock:", hourlyErr);
+    console.warn("[isone.adapter] Hourly load failed, trying DB:", hourlyErr);
   }
 
-  // 3. Return mock fallback
+  // 3. Try database (populated by scripts/import-isone-load.ts)
+  const dbLoad = await tryDbLoad();
+  if (dbLoad) return dbLoad;
+
+  // 4. Final fallback: hardcoded mock constant
   return {
     ...MOCK_GRID_LOAD,
     timestamp: new Date().toISOString(),

@@ -1,0 +1,5 @@
+# Ignore raw data files — import them via scripts/import-isone-load.ts
+*.csv
+*.xlsx
+*.json
+!.gitignore

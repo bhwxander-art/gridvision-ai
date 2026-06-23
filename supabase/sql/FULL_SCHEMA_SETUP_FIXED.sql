@@ -1,0 +1,440 @@
+-- ============================================================
+-- GridVision AI — Full Schema Setup (FIXED)
+-- Built directly from migrations 001–006, no modifications.
+--
+-- Supabase Dashboard → SQL Editor → New query → paste → Run
+-- ============================================================
+
+
+-- ============================================================
+-- MIGRATION 001 · Initial Schema
+-- ============================================================
+
+-- ── Extensions ───────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ── Helpers ───────────────────────────────────────────────────────────────────
+-- Trigger function that keeps updated_at current on any row change
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+-- ── substations ──────────────────────────────────────────────────────────────
+-- One row per physical substation in the service territory.
+-- Corresponds to SubstationPlan in lib/planning-engine.ts.
+
+CREATE TABLE substations (
+  id                   TEXT        PRIMARY KEY,           -- "ss-boston-north"
+  name                 TEXT        NOT NULL,              -- "Boston North 115/13.8 kV"
+  region               TEXT        NOT NULL,              -- "North Shore"
+  voltage_kv           NUMERIC(6,1) NOT NULL,             -- 115.0
+  nameplate_mva        NUMERIC(8,2) NOT NULL,             -- 450.00
+  peak_load_mw         NUMERIC(8,2) NOT NULL,             -- 342.00
+  n1_capacity_mw       NUMERIC(8,2) NOT NULL,             -- 405.00
+  annual_growth_pct    NUMERIC(5,2) NOT NULL,             -- 3.20
+  latitude             NUMERIC(10,6) NOT NULL,            -- 42.467100
+  longitude            NUMERIC(10,6) NOT NULL,            -- -70.943700
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_substations_region ON substations(region);
+
+CREATE TRIGGER trg_substations_updated_at
+  BEFORE UPDATE ON substations
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── transformers ─────────────────────────────────────────────────────────────
+-- One row per transformer bank.  Multiple transformers per substation.
+-- Corresponds to TransformerAsset in lib/planning-engine.ts.
+
+CREATE TABLE transformers (
+  id                   TEXT        PRIMARY KEY,           -- "tx-bn-1"
+  substation_id        TEXT        NOT NULL REFERENCES substations(id) ON DELETE CASCADE,
+  name                 TEXT        NOT NULL,              -- "T1 150 MVA"
+  rated_mva            NUMERIC(8,2) NOT NULL,             -- 150.00
+  peak_load_mva        NUMERIC(8,2) NOT NULL,             -- 118.00
+  load_factor          NUMERIC(4,3) NOT NULL,             -- 0.920
+  age_years            INTEGER     NOT NULL,              -- 22
+  n1_compliant         BOOLEAN     NOT NULL DEFAULT TRUE,
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT transformers_load_factor_range CHECK (load_factor BETWEEN 0 AND 1),
+  CONSTRAINT transformers_age_positive     CHECK (age_years >= 0)
+);
+
+CREATE INDEX idx_transformers_substation_id ON transformers(substation_id);
+
+CREATE TRIGGER trg_transformers_updated_at
+  BEFORE UPDATE ON transformers
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── feeders ──────────────────────────────────────────────────────────────────
+-- One row per distribution feeder circuit.
+-- Corresponds to FeederCircuit in lib/planning-engine.ts.
+
+CREATE TABLE feeders (
+  id                   TEXT        PRIMARY KEY,           -- "fd-bn-12"
+  substation_id        TEXT        NOT NULL REFERENCES substations(id) ON DELETE CASCADE,
+  name                 TEXT        NOT NULL,              -- "Feeder 12 — Lynn"
+  hosting_capacity_mw  NUMERIC(8,2) NOT NULL,             -- 45.00
+  committed_load_mw    NUMERIC(8,2) NOT NULL DEFAULT 0,   -- 28.00
+  queued_load_mw       NUMERIC(8,2) NOT NULL DEFAULT 0,   -- 8.00
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT feeders_hosting_positive    CHECK (hosting_capacity_mw > 0),
+  CONSTRAINT feeders_committed_non_neg   CHECK (committed_load_mw >= 0),
+  CONSTRAINT feeders_queued_non_neg      CHECK (queued_load_mw >= 0)
+);
+
+CREATE INDEX idx_feeders_substation_id ON feeders(substation_id);
+
+CREATE TRIGGER trg_feeders_updated_at
+  BEFORE UPDATE ON feeders
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── grid_load_history ────────────────────────────────────────────────────────
+-- Append-only time-series of system-wide load readings.
+-- Sources: ISO-NE 5-min/hourly API, SCADA historian, or manual entry.
+-- Partition by month in production once volume exceeds ~1 M rows.
+
+CREATE TABLE grid_load_history (
+  id                   BIGSERIAL   PRIMARY KEY,
+  territory_id         TEXT        NOT NULL DEFAULT 'eastern-ma',
+  recorded_at          TIMESTAMPTZ  NOT NULL,
+  load_mw              NUMERIC(10,2) NOT NULL,
+  source               TEXT        NOT NULL,              -- "ISO-NE", "SCADA", "manual"
+  interval_min         SMALLINT    NOT NULL DEFAULT 60    -- 5, 15, 60
+                         CHECK (interval_min IN (5, 15, 60)),
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Fast queries: latest reading, history by territory+time range
+CREATE INDEX idx_grid_load_territory_time
+  ON grid_load_history(territory_id, recorded_at DESC);
+
+-- Enforce uniqueness: one reading per source per interval per timestamp
+CREATE UNIQUE INDEX idx_grid_load_unique_reading
+  ON grid_load_history(territory_id, source, interval_min, recorded_at);
+
+-- ── data_center_queue ────────────────────────────────────────────────────────
+-- Interconnection applications and their current study/build status.
+-- Corresponds to DataCenterInterconnection in lib/planning-engine.ts.
+
+CREATE TABLE data_center_queue (
+  id                     TEXT        PRIMARY KEY,         -- "dc-001"
+  project_name           TEXT        NOT NULL,
+  developer              TEXT,
+  requested_mw           NUMERIC(8,2) NOT NULL,
+  load_factor            NUMERIC(4,3) NOT NULL,
+  target_cod             TEXT        NOT NULL,            -- "2028-Q2"
+  status                 TEXT        NOT NULL
+                           CHECK (status IN ('study','ia-executed','construction','energized')),
+  affected_substation_id TEXT        REFERENCES substations(id),
+  affected_feeder_id     TEXT        REFERENCES feeders(id),
+  ramp_months            INTEGER     NOT NULL DEFAULT 12,
+  created_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT dc_queue_load_factor_range CHECK (load_factor BETWEEN 0 AND 1),
+  CONSTRAINT dc_queue_requested_positive CHECK (requested_mw > 0)
+);
+
+CREATE INDEX idx_dc_queue_status        ON data_center_queue(status);
+CREATE INDEX idx_dc_queue_substation_id ON data_center_queue(affected_substation_id);
+
+CREATE TRIGGER trg_dc_queue_updated_at
+  BEFORE UPDATE ON data_center_queue
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── forecast_runs ────────────────────────────────────────────────────────────
+-- Audit log of every load forecast computation.
+-- Stores the full inputs and outputs so planners can reproduce results.
+
+CREATE TABLE forecast_runs (
+  id                   BIGSERIAL   PRIMARY KEY,
+  territory_id         TEXT        NOT NULL DEFAULT 'eastern-ma',
+  run_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  horizon_years        SMALLINT    NOT NULL CHECK (horizon_years IN (3, 5, 10)),
+  inputs               JSONB       NOT NULL,
+    -- { cityName, currentPeakLoad, populationGrowthRate, evGrowthRate, dataCenterLoad }
+  result               JSONB       NOT NULL,
+    -- { futureLoad, increasePercent, riskLevel, ... }
+  model_version        TEXT        NOT NULL DEFAULT '1.0',
+  source               TEXT        NOT NULL DEFAULT 'gridvision',
+    -- "gridvision" | "iso-ne-celt" | "eia-steo"
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_forecast_runs_territory_time
+  ON forecast_runs(territory_id, run_at DESC);
+
+-- ── Convenience view ─────────────────────────────────────────────────────────
+-- Materialises the SubstationPlan shape (sans transformer/feeder arrays) for
+-- quick SELECT without JOINs.
+
+CREATE VIEW v_substation_summary AS
+SELECT
+  s.id,
+  s.name,
+  s.region,
+  s.voltage_kv,
+  s.nameplate_mva,
+  s.peak_load_mw,
+  s.n1_capacity_mw,
+  s.annual_growth_pct,
+  s.latitude,
+  s.longitude,
+  ROUND((s.peak_load_mw / NULLIF(s.nameplate_mva, 0)) * 100, 1) AS utilization_pct,
+  (s.nameplate_mva - s.peak_load_mw)                              AS headroom_mw,
+  (s.n1_capacity_mw - s.peak_load_mw)                            AS n1_headroom_mw,
+  COUNT(DISTINCT t.id)                                            AS transformer_count,
+  COUNT(DISTINCT f.id)                                            AS feeder_count
+FROM substations s
+LEFT JOIN transformers t ON t.substation_id = s.id
+LEFT JOIN feeders     f ON f.substation_id = s.id
+GROUP BY s.id;
+
+
+-- ============================================================
+-- MIGRATION 002 · Seed Data (Eastern Massachusetts territory)
+-- ============================================================
+-- Run AFTER 001_initial_schema.sql.
+-- Safe to re-run — uses INSERT ... ON CONFLICT DO UPDATE.
+
+-- ── Substations ──────────────────────────────────────────────────────────────
+
+INSERT INTO substations
+  (id, name, region, voltage_kv, nameplate_mva, peak_load_mw,
+   n1_capacity_mw, annual_growth_pct, latitude, longitude)
+VALUES
+  ('ss-boston-north',
+   'Boston North 115/13.8 kV',  'North Shore',        115.0, 450.0, 342.0, 405.0, 3.2,
+   42.4671, -70.9437),
+
+  ('ss-cambridge-central',
+   'Cambridge Central 115/27 kV', 'Inner Metro',       115.0, 420.0, 398.0, 378.0, 4.8,
+   42.3626, -71.0857),
+
+  ('ss-somerville-east',
+   'Somerville East 27/13.8 kV', 'Inner Metro',         27.0, 290.0, 287.0, 261.0, 5.6,
+   42.3898, -71.0747),
+
+  ('ss-waltham-west',
+   'Waltham West 115/13.8 kV',  'Route 128 Corridor', 115.0, 380.0, 215.0, 342.0, 6.2,
+   42.3765, -71.2356)
+
+ON CONFLICT (id) DO UPDATE SET
+  name             = EXCLUDED.name,
+  region           = EXCLUDED.region,
+  voltage_kv       = EXCLUDED.voltage_kv,
+  nameplate_mva    = EXCLUDED.nameplate_mva,
+  peak_load_mw     = EXCLUDED.peak_load_mw,
+  n1_capacity_mw   = EXCLUDED.n1_capacity_mw,
+  annual_growth_pct = EXCLUDED.annual_growth_pct,
+  latitude         = EXCLUDED.latitude,
+  longitude        = EXCLUDED.longitude,
+  updated_at       = NOW();
+
+-- ── Transformers ─────────────────────────────────────────────────────────────
+
+INSERT INTO transformers
+  (id, substation_id, name, rated_mva, peak_load_mva, load_factor, age_years, n1_compliant)
+VALUES
+  -- Boston North
+  ('tx-bn-1', 'ss-boston-north',       'T1 150 MVA', 150.0, 118.0, 0.92, 22, TRUE),
+  ('tx-bn-2', 'ss-boston-north',       'T2 150 MVA', 150.0, 112.0, 0.92, 22, TRUE),
+
+  -- Cambridge Central
+  ('tx-cc-1', 'ss-cambridge-central',  'T1 100 MVA', 100.0,  94.0, 0.95, 38, FALSE),
+  ('tx-cc-2', 'ss-cambridge-central',  'T2 100 MVA', 100.0,  88.0, 0.95, 38, FALSE),
+
+  -- Somerville East
+  ('tx-se-1', 'ss-somerville-east',    'T1 75 MVA',   75.0,  74.0, 0.97, 31, TRUE),
+
+  -- Waltham West
+  ('tx-ww-1', 'ss-waltham-west',       'T1 125 MVA', 125.0,  98.0, 0.90, 18, TRUE)
+
+ON CONFLICT (id) DO UPDATE SET
+  name          = EXCLUDED.name,
+  rated_mva     = EXCLUDED.rated_mva,
+  peak_load_mva = EXCLUDED.peak_load_mva,
+  load_factor   = EXCLUDED.load_factor,
+  age_years     = EXCLUDED.age_years,
+  n1_compliant  = EXCLUDED.n1_compliant,
+  updated_at    = NOW();
+
+-- ── Feeders ──────────────────────────────────────────────────────────────────
+
+INSERT INTO feeders
+  (id, substation_id, name, hosting_capacity_mw, committed_load_mw, queued_load_mw)
+VALUES
+  ('fd-bn-12', 'ss-boston-north',      'Feeder 12 — Lynn',          45.0, 28.0,  8.0),
+  ('fd-cc-7',  'ss-cambridge-central', 'Feeder 7 — Kendall Sq',     32.0, 30.0, 12.0),
+  ('fd-se-3',  'ss-somerville-east',   'Feeder 3 — Assembly Row',   18.0, 16.0,  6.0),
+  ('fd-ww-5',  'ss-waltham-west',      'Feeder 5 — Route 128 Tech', 55.0, 22.0, 28.0)
+
+ON CONFLICT (id) DO UPDATE SET
+  name                = EXCLUDED.name,
+  hosting_capacity_mw = EXCLUDED.hosting_capacity_mw,
+  committed_load_mw   = EXCLUDED.committed_load_mw,
+  queued_load_mw      = EXCLUDED.queued_load_mw,
+  updated_at          = NOW();
+
+-- ── Data Center Queue ─────────────────────────────────────────────────────────
+
+INSERT INTO data_center_queue
+  (id, project_name, developer, requested_mw, load_factor,
+   target_cod, status, affected_substation_id, affected_feeder_id, ramp_months)
+VALUES
+  ('dc-001',
+   'Project Helix — AI Training Campus', 'Undisclosed Hyperscaler',
+   180.0, 0.96, '2028-Q2', 'study',
+   'ss-waltham-west', 'fd-ww-5', 18),
+
+  ('dc-002',
+   'Kendall Inference Hub',             'Cloud Provider JV',
+    45.0, 0.94, '2027-Q4', 'ia-executed',
+   'ss-cambridge-central', 'fd-cc-7', 12),
+
+  ('dc-003',
+   'Assembly Edge DC',                  'Regional Colo Operator',
+    22.0, 0.88, '2027-Q1', 'construction',
+   'ss-somerville-east', 'fd-se-3', 6),
+
+  ('dc-004',
+   'North Shore Enterprise DC',         'Enterprise Tenant',
+    15.0, 0.85, '2026-Q4', 'study',
+   'ss-boston-north', 'fd-bn-12', 9)
+
+ON CONFLICT (id) DO UPDATE SET
+  project_name           = EXCLUDED.project_name,
+  developer              = EXCLUDED.developer,
+  requested_mw           = EXCLUDED.requested_mw,
+  load_factor            = EXCLUDED.load_factor,
+  target_cod             = EXCLUDED.target_cod,
+  status                 = EXCLUDED.status,
+  affected_substation_id = EXCLUDED.affected_substation_id,
+  affected_feeder_id     = EXCLUDED.affected_feeder_id,
+  ramp_months            = EXCLUDED.ramp_months,
+  updated_at             = NOW();
+
+-- ── Initial grid load reading ─────────────────────────────────────────────────
+-- One seed reading so the history table is non-empty.
+
+INSERT INTO grid_load_history (territory_id, recorded_at, load_mw, source, interval_min)
+VALUES ('eastern-ma', '2026-06-10 14:00:00+00', 16842.0, 'manual', 60)
+ON CONFLICT (territory_id, source, interval_min, recorded_at) DO NOTHING;
+
+
+-- ============================================================
+-- MIGRATION 003 · Scenario Persistence
+-- ============================================================
+
+CREATE TABLE scenarios (
+  id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name        TEXT        NOT NULL,
+  inputs      JSONB       NOT NULL,
+    -- { dataCenterLoadMW, evGrowthPct, populationGrowthPct, commercialGrowthPct }
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_scenarios_created_at ON scenarios(created_at DESC);
+
+COMMENT ON TABLE scenarios IS
+  'User-saved planning scenarios from the /enterprise/scenarios tool.';
+COMMENT ON COLUMN scenarios.inputs IS
+  'ScenarioInputs JSON: dataCenterLoadMW, evGrowthPct, populationGrowthPct, commercialGrowthPct.';
+
+
+-- ============================================================
+-- MIGRATION 004 · Auth & Row-Level Security
+-- ============================================================
+-- Prerequisite: Supabase Auth must be enabled.
+-- The service-role key used by API routes bypasses RLS.
+-- These policies protect direct anon/user-key access.
+
+-- ── scenarios ─────────────────────────────────────────────────────────────────
+
+ALTER TABLE scenarios ENABLE ROW LEVEL SECURITY;
+
+-- Authenticated users can read all scenarios (shared planning workspace)
+CREATE POLICY "scenarios_select"
+  ON scenarios FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- Authenticated users can create scenarios
+CREATE POLICY "scenarios_insert"
+  ON scenarios FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+-- Authenticated users can delete any scenario (shared workspace)
+CREATE POLICY "scenarios_delete"
+  ON scenarios FOR DELETE
+  TO authenticated
+  USING (true);
+
+
+-- ============================================================
+-- MIGRATION 005 · Scenario Ownership
+-- ============================================================
+-- Prerequisite: Migration 003 (scenarios table), 004 (RLS enabled)
+
+-- Add user_id column; nullable so existing rows are not broken.
+-- The service-role API routes always pass a user_id for new inserts.
+-- Rows with user_id IS NULL are legacy/dev-mode rows.
+ALTER TABLE scenarios
+  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_scenarios_user_id ON scenarios(user_id);
+
+-- ── Replace permissive policies with owner-scoped ones ─────────────────────────
+
+DROP POLICY IF EXISTS "scenarios_select" ON scenarios;
+DROP POLICY IF EXISTS "scenarios_insert" ON scenarios;
+DROP POLICY IF EXISTS "scenarios_delete" ON scenarios;
+
+-- Authenticated users see only their own scenarios
+CREATE POLICY "scenarios_select"
+  ON scenarios FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid());
+
+-- Authenticated users may only insert rows they own
+CREATE POLICY "scenarios_insert"
+  ON scenarios FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+-- Authenticated users may only delete their own scenarios
+CREATE POLICY "scenarios_delete"
+  ON scenarios FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid());
+
+
+-- ============================================================
+-- MIGRATION 006 · ISO-NE Load Import
+-- ============================================================
+--
+-- Adds a nullable raw_type column to grid_load_history so that
+-- ISO-NE CSV imports can preserve the original Type field
+-- (e.g. "Real-Time Demand", "Day-Ahead Demand").
+--
+-- All existing rows receive NULL for raw_type, which is expected.
+-- The ingestion script (scripts/import-isone-load.ts) populates
+-- this column for newly imported rows.
+
+ALTER TABLE grid_load_history
+  ADD COLUMN IF NOT EXISTS raw_type TEXT;
+
+COMMENT ON COLUMN grid_load_history.raw_type IS
+  'Original Type field from ISO-NE export (e.g. "Real-Time Demand", "Day-Ahead Demand"). NULL for readings from other sources.';

@@ -59,10 +59,13 @@ export interface DbGridLoadReading {
   load_mw: number;
   source: string;
   interval_min: 5 | 15 | 60;
+  raw_type: string | null;   // ISO-NE Type field from CSV imports (null for other sources)
   created_at: string;
 }
 
-export type DbGridLoadInsert = Omit<DbGridLoadReading, "id" | "created_at">;
+export type DbGridLoadInsert = Omit<DbGridLoadReading, "id" | "created_at" | "raw_type"> & {
+  raw_type?: string | null;
+};
 
 // ── data_center_queue ────────────────────────────────────────────────────────
 
