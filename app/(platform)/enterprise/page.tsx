@@ -27,6 +27,9 @@ import { useDataCenterQueue } from "@/lib/hooks/use-datacenter-queue";
 import { useForecast } from "@/lib/hooks/use-forecast";
 import { ForecastPanel } from "@/components/enterprise/forecast-panel";
 import { CopilotPanel } from "@/components/enterprise/copilot-panel";
+import { useLoadCurrent } from "@/lib/hooks/use-load-current";
+import { useLoadHistory } from "@/lib/hooks/use-load-history";
+import { LoadHistoryChart } from "@/components/enterprise/load-history-chart";
 
 function DataBadge({ provenance }: { provenance: ProvenanceInfo | null }) {
   if (!provenance) return null;
@@ -97,6 +100,9 @@ export default function EnterprisePlanningPage() {
     error: forecastError,
   } = useForecast();
 
+  const { data: liveLoad } = useLoadCurrent();
+  const { data: loadHistory, loading: historyLoading } = useLoadHistory(96);
+
   const loading = ssLoading || queueLoading;
   const error = ssError ?? queueError;
 
@@ -155,6 +161,12 @@ export default function EnterprisePlanningPage() {
                         label: "DC Queue Total",
                         value: `${substationData.config.loadGrowthAssumptions.dataCenterQueueMW} MW`,
                       },
+                      {
+                        label: "Current Load",
+                        value: liveLoad
+                          ? `${liveLoad.currentLoadMW.toLocaleString()} MW`
+                          : "—",
+                      },
                     ].map((item) => (
                       <div
                         key={item.label}
@@ -187,6 +199,10 @@ export default function EnterprisePlanningPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {!historyLoading && loadHistory && loadHistory.readings.length > 0 && (
+                <LoadHistoryChart readings={loadHistory.readings} />
+              )}
 
               <PriorityActionsTable
                 portfolio={substationData.portfolio}

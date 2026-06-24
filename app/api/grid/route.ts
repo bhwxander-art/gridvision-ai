@@ -10,21 +10,15 @@ import { assessSubstationCapacity } from "@/lib/planning-engine";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { GridLoadRepository } from "@/lib/db/repositories/grid-load.repository";
 import { fetchISONeGridLoad } from "@/lib/adapters/isone.adapter";
-import { makeProvenance, mockProvenance } from "@/lib/provenance";
+import { makeProvenance } from "@/lib/provenance";
 
-// Representative Eastern MA territory load for the static/mock path.
-// Replace with zone-level ISO-NE fetch (/fiveminuteload/{zoneId}) for live data.
-const TERRITORY_MOCK_LOAD_MW = 3_984;
-
-function buildBaseStatus(): Omit<GridStatusResponse, "source" | "timestamp" | "freshness" | "isMock" | "_provenance"> {
+function buildBaseStatus() {
   const results = substationPortfolio.map((ss) =>
     assessSubstationCapacity(ss, planningTerritory.planningHorizonYears)
   );
   return {
-    currentLoadMW: TERRITORY_MOCK_LOAD_MW,
     peakSystemLoadMW: planningTerritory.peakSystemLoadMW,
     systemCapacityMW: TERRITORY_CAPACITY_MW,
-    utilizationPct: Math.round((TERRITORY_MOCK_LOAD_MW / TERRITORY_CAPACITY_MW) * 1000) / 10,
     substationSummary: {
       total: substationPortfolio.length,
       constrained: results.filter((r) => r.severity === "constrained").length,
@@ -54,7 +48,7 @@ function mergeLoad(
   };
 }
 
-export async function GET(): Promise<NextResponse<GridStatusResponse>> {
+export async function GET(): Promise<NextResponse<GridStatusResponse | { error: string }>> {
   const base = buildBaseStatus();
 
   // ── 1. ISO New England live load ───────────────────────────────────────────
@@ -84,10 +78,9 @@ export async function GET(): Promise<NextResponse<GridStatusResponse>> {
     }
   }
 
-  // ── 3. Mock fallback ────────────────────────────────────────────────────────
-  const prov = mockProvenance("GridVision");
+  // ── 3. No data available ────────────────────────────────────────────────────
   return NextResponse.json(
-    { ...base, source: prov.source, timestamp: prov.timestamp, freshness: "mock" as const, isMock: true, _provenance: prov },
-    { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=60", "X-Data-Source": "mock" } }
+    { error: "Load data unavailable — configure ISO-NE credentials or run scripts/import-isone-load.ts" },
+    { status: 503 }
   );
 }

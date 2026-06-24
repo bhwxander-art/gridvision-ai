@@ -76,15 +76,6 @@ interface RawLocalPeakForecastResponse {
 
 // ── Mock fallback data ─────────────────────────────────────────────────────
 
-// Representative Eastern MA territory load for a typical planning day (~83% of peak).
-// Note: live adapter should fetch zone-level load via /fiveminuteload/{zoneId}, not
-// /fiveminutesystemload which returns ISO-NE system-wide load (~14,000+ MW).
-const MOCK_GRID_LOAD: GridLoad = {
-  source: "ISO New England (mock)",
-  currentLoadMW: 3_984,
-  timestamp: new Date().toISOString(),
-};
-
 const MOCK_LOAD_FORECAST: TerritoryLoadForecast = {
   territoryId: ISONE_TERRITORY_ID,
   territoryName: ISONE_TERRITORY_NAME,
@@ -290,15 +281,14 @@ async function tryDbLoad(): Promise<(GridLoad & { provenance: DataProvenance }) 
 export async function fetchISONeGridLoad(opts?: {
   signal?: AbortSignal;
 }): Promise<GridLoad & { provenance: DataProvenance }> {
-  // No credentials — try DB before falling back to hardcoded mock.
+  // No credentials — try DB, throw if unavailable.
   if (!hasCredentials()) {
     const dbLoad = await tryDbLoad();
     if (dbLoad) return dbLoad;
-    return {
-      ...MOCK_GRID_LOAD,
-      timestamp: new Date().toISOString(),
-      provenance: buildProvenance("mock"),
-    };
+    throw new Error(
+      "[isone.adapter] No ISO-NE credentials and no cached DB reading. " +
+        "Set ISONE_API_USER + ISONE_API_PASSWORD or run scripts/import-isone-load.ts."
+    );
   }
 
   // 1. Try 5-minute load (freshest available)
@@ -335,12 +325,9 @@ export async function fetchISONeGridLoad(opts?: {
   const dbLoad = await tryDbLoad();
   if (dbLoad) return dbLoad;
 
-  // 4. Final fallback: hardcoded mock constant
-  return {
-    ...MOCK_GRID_LOAD,
-    timestamp: new Date().toISOString(),
-    provenance: buildProvenance("mock"),
-  };
+  throw new Error(
+    "[isone.adapter] All load sources exhausted — ISO-NE API unavailable and DB empty or unconfigured."
+  );
 }
 
 /**
