@@ -82,4 +82,44 @@ export class FeederRepository {
 
     if (error) throw new Error(`[FeederRepository.updateLoad] ${error.message}`);
   }
+
+  /** Returns a single feeder by id, or null. */
+  async findById(id: string): Promise<FeederCircuit | null> {
+    const { data, error } = await this.client
+      .from("feeders")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw new Error(`[FeederRepository.findById] ${error.message}`);
+    if (!data) return null;
+    return toFeeder(data as DbFeeder);
+  }
+
+  /** Deletes a feeder by id. */
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client
+      .from("feeders")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw new Error(`[FeederRepository.delete] ${error.message}`);
+  }
+
+  /** Returns all feeders with DB timestamps for the asset management UI. */
+  async listManaged(): Promise<(FeederCircuit & { createdAt: string; updatedAt: string })[]> {
+    const { data, error } = await this.client
+      .from("feeders")
+      .select("*")
+      .order("substation_id, name");
+
+    if (error) throw new Error(`[FeederRepository.listManaged] ${error.message}`);
+    return (data as (DbFeeder & { created_at: string; updated_at: string })[]).map(
+      (row) => ({
+        ...toFeeder(row),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })
+    );
+  }
 }

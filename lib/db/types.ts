@@ -117,6 +117,152 @@ export interface DbScenario {
 
 export type DbScenarioInsert = Omit<DbScenario, "id" | "created_at">;
 
+// ── tenants ───────────────────────────────────────────────────────────────────
+
+export type TenantType =
+  | "utility"
+  | "developer"
+  | "consultant"
+  | "investor"
+  | "demo";
+
+export type TenantPlan   = "trial" | "professional" | "enterprise";
+export type TenantStatus = "active" | "suspended" | "cancelled";
+
+export interface DbTenant {
+  id:         string;
+  slug:       string;
+  name:       string;
+  type:       TenantType;
+  plan:       TenantPlan;
+  status:     TenantStatus;
+  settings:   Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DbTenantInsert = Omit<DbTenant, "id" | "created_at" | "updated_at" | "settings"> & {
+  id?:       string;
+  settings?: Record<string, unknown>;
+};
+
+// ── users ─────────────────────────────────────────────────────────────────────
+
+export interface DbUser {
+  id:             string;
+  email:          string;
+  full_name:      string | null;
+  avatar_url:     string | null;
+  is_super_admin: boolean;
+  created_at:     string;
+  updated_at:     string;
+}
+
+export type UserRole =
+  | "super_admin"
+  | "utility_executive"
+  | "planner"
+  | "engineer"
+  | "sales"
+  | "read_only";
+
+// ── user_tenants ──────────────────────────────────────────────────────────────
+
+export interface DbUserTenant {
+  id:          string;
+  user_id:     string;
+  tenant_id:   string;
+  role:        UserRole;
+  is_active:   boolean;
+  invited_at:  string;
+  accepted_at: string | null;
+  created_at:  string;
+}
+
+export interface DbUserWithRole extends DbUser {
+  role:      UserRole;
+  is_active: boolean;
+  tenant_id: string;
+}
+
+// ── capital_projects ─────────────────────────────────────────────────────────
+
+export type DbUpgradeType =
+  | "transformer-replacement"
+  | "substation-expansion"
+  | "feeder-reconductor"
+  | "new-substation"
+  | "cable-replacement";
+
+export type DbProjectStatus =
+  | "planned"
+  | "approved"
+  | "in-progress"
+  | "completed"
+  | "cancelled";
+
+export interface DbCapitalProject {
+  id: string;
+  substation_id: string;
+  project_name: string;
+  upgrade_type: DbUpgradeType;
+  estimated_cost_usd: number;
+  added_capacity_mw: number;
+  implementation_months: number;
+  risk_reduction: number;
+  priority_score: number;
+  status: DbProjectStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DbCapitalProjectInsert = Omit<DbCapitalProject, "created_at" | "updated_at">;
+
+// ── import_jobs ───────────────────────────────────────────────────────────────
+
+export type ImportEntityType = "substations" | "transformers" | "feeders" | "accounts";
+export type ImportJobStatus  = "pending" | "processing" | "completed" | "partial" | "failed";
+
+export interface DbImportJob {
+  id:             string;
+  tenant_id:      string;
+  entity_type:    ImportEntityType;
+  status:         ImportJobStatus;
+  rows_processed: number;
+  rows_failed:    number;
+  error_details:  Array<{ row: number; field: string; message: string }>;
+  filename:       string | null;
+  created_at:     string;
+  completed_at:   string | null;
+}
+
+// ── accounts (CRM — DB-backed) ────────────────────────────────────────────────
+
+export interface DbAccount {
+  id:                    string;
+  tenant_id:             string;
+  name:                  string;
+  type:                  string;
+  status:                string;
+  annual_load_mw:        number;
+  projected_growth_mw:   number;
+  territory:             string | null;
+  estimated_revenue_usd: number;
+  estimated_arr:         number;
+  deal_probability:      number;
+  expected_close_date:   string | null;
+  forecast_quarter:      string | null;
+  capacity_required_mw:  number;
+  priority:              string;
+  risk_rating:           string;
+  contact_name:          string | null;
+  contact_title:         string | null;
+  notes:                 string | null;
+  created_at:            string;
+  updated_at:            string;
+}
+
 // ── Supabase nested join shapes ───────────────────────────────────────────────
 
 /** Shape returned by .select('*, transformers(*), feeders(*)') */

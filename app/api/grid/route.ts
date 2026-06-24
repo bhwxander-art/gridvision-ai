@@ -11,6 +11,7 @@ import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { GridLoadRepository } from "@/lib/db/repositories/grid-load.repository";
 import { fetchISONeGridLoad } from "@/lib/adapters/isone.adapter";
 import { makeProvenance } from "@/lib/provenance";
+import { EASTERN_MA_FRACTION } from "@/lib/services/capacity.service";
 
 function buildBaseStatus() {
   const results = substationPortfolio.map((ss) =>
@@ -30,12 +31,17 @@ function buildBaseStatus() {
 
 function mergeLoad(
   base: ReturnType<typeof buildBaseStatus>,
-  currentLoadMW: number,
+  isoneSystemLoadMW: number,
   source: string,
   timestamp: string,
   isMock: boolean
 ): GridStatusResponse {
   const prov = makeProvenance(source, timestamp, isMock);
+  // Scale ISO-NE system load to Eastern MA territory scope before computing
+  // utilization against Eastern MA installed capacity (6,500 MW).
+  // Raw ISO-NE figures (~14,000 MW) are system-wide and must not be compared
+  // directly to territory capacity — that produces utilization >100%.
+  const currentLoadMW = Math.round(isoneSystemLoadMW * EASTERN_MA_FRACTION);
   return {
     ...base,
     currentLoadMW,

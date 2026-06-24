@@ -82,4 +82,44 @@ export class TransformerRepository {
 
     if (error) throw new Error(`[TransformerRepository.updatePeakLoad] ${error.message}`);
   }
+
+  /** Returns a single transformer by id, or null. */
+  async findById(id: string): Promise<TransformerAsset | null> {
+    const { data, error } = await this.client
+      .from("transformers")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw new Error(`[TransformerRepository.findById] ${error.message}`);
+    if (!data) return null;
+    return toTransformer(data as DbTransformer);
+  }
+
+  /** Deletes a transformer by id. */
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client
+      .from("transformers")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw new Error(`[TransformerRepository.delete] ${error.message}`);
+  }
+
+  /** Returns all transformers with DB timestamps for the asset management UI. */
+  async listManaged(): Promise<(TransformerAsset & { createdAt: string; updatedAt: string })[]> {
+    const { data, error } = await this.client
+      .from("transformers")
+      .select("*")
+      .order("substation_id, name");
+
+    if (error) throw new Error(`[TransformerRepository.listManaged] ${error.message}`);
+    return (data as (DbTransformer & { created_at: string; updated_at: string })[]).map(
+      (row) => ({
+        ...toTransformer(row),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })
+    );
+  }
 }

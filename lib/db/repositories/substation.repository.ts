@@ -128,4 +128,31 @@ export class SubstationRepository {
 
     if (error) throw new Error(`[SubstationRepository.updatePeakLoad] ${error.message}`);
   }
+
+  /** Deletes a substation by id (cascades to transformers and feeders). */
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client
+      .from("substations")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw new Error(`[SubstationRepository.delete] ${error.message}`);
+  }
+
+  /** Returns all substations with DB timestamps for the asset management UI. */
+  async listManaged(): Promise<(SubstationPlan & { createdAt: string; updatedAt: string })[]> {
+    const { data, error } = await this.client
+      .from("substations")
+      .select("*, transformers(*), feeders(*)")
+      .order("name");
+
+    if (error) throw new Error(`[SubstationRepository.listManaged] ${error.message}`);
+    return (data as (DbSubstationWithRelations & { created_at: string; updated_at: string })[]).map(
+      (row) => ({
+        ...toSubstationPlan(row),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })
+    );
+  }
 }

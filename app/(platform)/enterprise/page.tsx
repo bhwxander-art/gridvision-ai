@@ -29,7 +29,23 @@ import { ForecastPanel } from "@/components/enterprise/forecast-panel";
 import { CopilotPanel } from "@/components/enterprise/copilot-panel";
 import { useLoadCurrent } from "@/lib/hooks/use-load-current";
 import { useLoadHistory } from "@/lib/hooks/use-load-history";
+import { useCapacityCurrent } from "@/lib/hooks/use-capacity-current";
 import { LoadHistoryChart } from "@/components/enterprise/load-history-chart";
+import { CapacityKpiStrip } from "@/components/enterprise/capacity-kpi-strip";
+import { CapacityUtilizationChart } from "@/components/enterprise/capacity-utilization-chart";
+import { DataCenterSimulator } from "@/components/enterprise/datacenter-simulator";
+import { CapacityCopilot } from "@/components/enterprise/capacity-copilot";
+import { ScenarioWorkspace } from "@/components/enterprise/scenario-workspace";
+import { CapitalPlanningPanel } from "@/components/enterprise/capital-planning-panel";
+import { AssetManagementPanel } from "@/components/enterprise/asset-management-panel";
+import { AccountsSection } from "@/components/enterprise/accounts-section";
+import { RevenueDashboard } from "@/components/enterprise/revenue-dashboard";
+import { DealRiskPanel } from "@/components/enterprise/deal-risk-panel";
+import { RevenueCopilot } from "@/components/enterprise/revenue-copilot";
+import { TenantManagement } from "@/components/admin/tenant-management";
+import { UserManagement } from "@/components/admin/user-management";
+import { DataImportCenter } from "@/components/admin/data-import-center";
+import { DataHealthDashboard } from "@/components/admin/data-health-dashboard";
 
 function DataBadge({ provenance }: { provenance: ProvenanceInfo | null }) {
   if (!provenance) return null;
@@ -80,6 +96,7 @@ function ErrorBanner({ message }: { message: string }) {
 
 export default function EnterprisePlanningPage() {
   const [section, setSection] = useState<EnterpriseSection>("overview");
+  const [simulatedMW, setSimulatedMW] = useState(100);
 
   const {
     data: substationData,
@@ -102,6 +119,7 @@ export default function EnterprisePlanningPage() {
 
   const { data: liveLoad } = useLoadCurrent();
   const { data: loadHistory, loading: historyLoading } = useLoadHistory(96);
+  const { data: capacity } = useCapacityCurrent();
 
   const loading = ssLoading || queueLoading;
   const error = ssError ?? queueError;
@@ -200,8 +218,34 @@ export default function EnterprisePlanningPage() {
                 </Card>
               </div>
 
+              {capacity && (
+                <CapacityKpiStrip snapshot={capacity} />
+              )}
+
               {!historyLoading && loadHistory && loadHistory.readings.length > 0 && (
-                <LoadHistoryChart readings={loadHistory.readings} />
+                <>
+                  <CapacityUtilizationChart readings={loadHistory.readings} />
+                  <LoadHistoryChart readings={loadHistory.readings} />
+                </>
+              )}
+
+              {capacity && (
+                <DataCenterSimulator
+                  baseline={capacity}
+                  onAddedMWChange={setSimulatedMW}
+                />
+              )}
+
+              {capacity && (
+                <CapacityCopilot addedMW={simulatedMW} />
+              )}
+
+              {capacity && (
+                <ScenarioWorkspace
+                  baseline={capacity}
+                  currentMW={simulatedMW}
+                  onLoadMW={setSimulatedMW}
+                />
               )}
 
               <PriorityActionsTable
@@ -259,6 +303,38 @@ export default function EnterprisePlanningPage() {
               forecast={forecast}
               config={substationData.config}
             />
+          )}
+
+          {section === "capital" && (
+            <CapitalPlanningPanel
+              simulatedMW={simulatedMW}
+              capacity={capacity}
+            />
+          )}
+
+          {section === "assets" && (
+            <AssetManagementPanel />
+          )}
+
+          {section === "accounts" && (
+            <AccountsSection />
+          )}
+
+          {section === "revenue" && (
+            <div className="space-y-6">
+              <RevenueDashboard />
+              <DealRiskPanel />
+              <RevenueCopilot />
+            </div>
+          )}
+
+          {section === "admin" && (
+            <div className="space-y-6">
+              <DataHealthDashboard />
+              <DataImportCenter />
+              <TenantManagement />
+              <UserManagement />
+            </div>
           )}
         </div>
       )}

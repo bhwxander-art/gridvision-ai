@@ -1,16 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
   Building2,
   ChevronLeft,
+  CircleDollarSign,
+  Database,
+  DollarSign,
   LayoutDashboard,
   Map,
   Server,
   Settings,
+  Shield,
   Sparkles,
   TrendingUp,
+  Users,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +30,11 @@ const sidebarNav = [
   { id: "map", label: "Territory Map", icon: Map },
   { id: "forecast", label: "Load Forecast", icon: TrendingUp },
   { id: "copilot", label: "AI Copilot", icon: Sparkles },
+  { id: "capital", label: "Capital Plan", icon: CircleDollarSign },
+  { id: "assets",   label: "Assets",       icon: Database },
+  { id: "accounts", label: "Accounts",           icon: Users       },
+  { id: "revenue",  label: "Revenue Intelligence", icon: DollarSign  },
+  { id: "admin",    label: "Administration",       icon: Shield      },
 ] as const;
 
 export type EnterpriseSection = (typeof sidebarNav)[number]["id"];
@@ -130,6 +141,9 @@ export function EnterpriseShell({
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+            {/* Tenant switcher chip */}
+            <TenantChip />
+
             <span className="hidden sm:inline">
               {territory && (
                 <>
@@ -158,3 +172,30 @@ export function EnterpriseShell({
 }
 
 export { sidebarNav };
+
+// ── Tenant switcher chip ──────────────────────────────────────────────────────
+// Client-side component; reads the current tenant from a lightweight API call.
+// Falls back to "GridVision Demo" when the database is not configured.
+
+function TenantChip() {
+  const [tenantName, setTenantName] = useState("GridVision Demo");
+
+  useEffect(() => {
+    fetch("/api/tenants")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const d = await r.json();
+        const demo = (d.tenants as Array<{ name: string; slug: string }> | undefined)
+          ?.find((t) => t.slug === "gridvision-demo");
+        if (demo) setTenantName(demo.name);
+      })
+      .catch(() => {/* silently keep default */});
+  }, []);
+
+  return (
+    <span className="hidden items-center gap-1.5 rounded-full border border-border/40 bg-background/40 px-2.5 py-0.5 text-[10px] font-medium sm:flex">
+      <Shield className="h-2.5 w-2.5 text-primary" />
+      {tenantName}
+    </span>
+  );
+}
