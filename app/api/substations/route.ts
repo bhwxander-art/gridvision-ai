@@ -31,7 +31,10 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
       const repo = new SubstationRepository(getServerClient());
       const portfolio = await repo.findAll(ctx.tenantId);
 
-      const simple: Substation[] = portfolio.map((ss) => {
+      // If database returns empty portfolio, use mock data as fallback
+      const effectivePortfolio = portfolio.length > 0 ? portfolio : substationPortfolio;
+
+      const simple: Substation[] = effectivePortfolio.map((ss) => {
         const util = ss.peakLoadMW / ss.nameplateMVA;
         const status: Substation["status"] =
           util >= 0.95 ? "capacity-risk" : util >= 0.80 ? "warning" : "normal";
@@ -48,17 +51,18 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
       });
 
       const now = new Date().toISOString();
+      const dataSource = portfolio.length > 0 ? "db" : "db-empty-fallback";
       const body: SubstationServiceData = {
         ...MOCK_BASE,
-        portfolio,
+        portfolio: effectivePortfolio,
         simple,
-        _provenance: makeProvenance("Supabase", now, false),
+        _provenance: makeProvenance("Supabase", now, portfolio.length > 0),
       };
 
       return NextResponse.json(body, {
         headers: {
           "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
-          "X-Data-Source": "db",
+          "X-Data-Source": dataSource,
         },
       });
     } catch (dbErr) {
