@@ -40,7 +40,9 @@ import { defaultForecastInputs } from "@/lib/config";
 import { formatMW, formatPercent } from "@/lib/utils";
 import { useIsoLoad } from "@/lib/hooks/use-iso-load";
 import { useIsoHistory } from "@/lib/hooks/use-iso-history";
+import { useGridHealth } from "@/lib/hooks/use-grid-health";
 import { generateAlerts, type GridAlert, type AlertSeverity } from "@/lib/alerts/grid-alerts";
+import type { HealthStatus } from "@/lib/health/grid-health";
 
 // ── Forecast helpers (unchanged) ───────────────────────────────────────────
 
@@ -106,12 +108,24 @@ const STATUS_STYLES = {
   offline: { dot: "bg-red-400",    text: "text-red-400",    label: "Offline" },
 };
 
+// ── Grid Health helpers ────────────────────────────────────────────────────
+
+const HEALTH_STATUS_CONFIG: Record<
+  HealthStatus,
+  { label: string; emoji: string; scoreClass: string; badgeVariant: "success" | "warning" | "danger" }
+> = {
+  stable:   { label: "Stable",   emoji: "🟢", scoreClass: "text-green-400",  badgeVariant: "success" },
+  elevated: { label: "Elevated", emoji: "🟡", scoreClass: "text-yellow-400", badgeVariant: "warning" },
+  critical: { label: "Critical", emoji: "🔴", scoreClass: "text-red-400",    badgeVariant: "danger"  },
+};
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   // ── Grid Monitor data ──────────────────────────────────────────────────
   const { data: liveLoad, loading: loadLoading, error: loadError } = useIsoLoad(60_000);
   const { readings, loading: histLoading } = useIsoHistory(24, 300_000);
+  const { result: health, loading: healthLoading } = useGridHealth(120_000);
 
   const dataAgeMinutes = liveLoad
     ? (Date.now() - new Date(liveLoad.timestamp).getTime()) / 60_000
@@ -294,6 +308,90 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Grid Health Score */}
+        <Card className="border-border/60 mb-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">Grid Health Score</CardTitle>
+              {health && (
+                <Badge variant={HEALTH_STATUS_CONFIG[health.status].badgeVariant}>
+                  {HEALTH_STATUS_CONFIG[health.status].emoji}&nbsp;
+                  {HEALTH_STATUS_CONFIG[health.status].label}
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {healthLoading && !health ? (
+              <div className="flex h-[120px] items-center justify-center text-sm text-muted-foreground">
+                Computing…
+              </div>
+            ) : health ? (
+              <div className="space-y-4">
+                {/* Score + factors row */}
+                <div className="grid grid-cols-[auto_1fr] gap-6 items-start">
+                  {/* Score dial */}
+                  <div className="flex flex-col items-center justify-center min-w-[80px]">
+                    <span
+                      className={cn(
+                        "font-mono text-5xl font-bold leading-none",
+                        HEALTH_STATUS_CONFIG[health.status].scoreClass
+                      )}
+                    >
+                      {health.score}
+                    </span>
+                    <span className="mt-1 text-xs text-muted-foreground">/ 100</span>
+                  </div>
+
+                  {/* Factor bars */}
+                  <div className="space-y-2.5">
+                    {health.factors.map((f) => (
+                      <div key={f.id}>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted-foreground truncate">{f.label}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-xs text-foreground w-7 text-right">
+                              {f.score}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              f.score >= 70
+                                ? "bg-green-400"
+                                : f.score >= 40
+                                ? "bg-yellow-400"
+                                : "bg-red-400"
+                            )}
+                            style={{ width: `${f.score}%` }}
+                          />
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground/70 truncate">
+                          {f.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recommendation */}
+                <div className="flex items-start gap-2 rounded-md border border-border/40 bg-secondary/30 px-3 py-2">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {health.recommendation}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-[120px] items-center justify-center text-sm text-muted-foreground">
+                Health score unavailable — awaiting data sync
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* 24-Hour Load Trend */}
         <Card className="border-border/60 mb-6">
