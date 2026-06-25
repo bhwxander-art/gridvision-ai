@@ -59,22 +59,22 @@ export class AssetRelationshipRepository {
    * dependency tree. Works for transformer ids, feeder ids, and substation ids.
    * Returns null if the asset cannot be found or has no parent substation.
    */
-  async findConnectedAssets(assetId: string): Promise<AssetDependencies | null> {
+  async findConnectedAssets(assetId: string, tenantId: string): Promise<AssetDependencies | null> {
     // Try direct substation match first
-    const directSub = await this.ss.findById(assetId);
-    if (directSub) return this.findAssetDependencies(assetId);
+    const directSub = await this.ss.findById(assetId, tenantId);
+    if (directSub) return this.findAssetDependencies(assetId, tenantId);
 
     // Try transformer
-    const transformer = await this.tx.findById(assetId);
-    if (transformer) return this.findAssetDependencies(transformer.substationId);
+    const transformer = await this.tx.findById(assetId, tenantId);
+    if (transformer) return this.findAssetDependencies(transformer.substationId, tenantId);
 
     // Try feeder
-    const feeder = await this.fd.findById(assetId);
-    if (feeder) return this.findAssetDependencies(feeder.substationId);
+    const feeder = await this.fd.findById(assetId, tenantId);
+    if (feeder) return this.findAssetDependencies(feeder.substationId, tenantId);
 
     // Try capital project
-    const project = await this.cp.findById(assetId);
-    if (project) return this.findAssetDependencies(project.substationId);
+    const project = await this.cp.findById(assetId, tenantId);
+    if (project) return this.findAssetDependencies(project.substationId, tenantId);
 
     return null;
   }
