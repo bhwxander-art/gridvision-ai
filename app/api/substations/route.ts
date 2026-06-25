@@ -35,26 +35,39 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
 
       // ── TEMPORARY DIAGNOSTIC: Test each query progressively ──
       const client = getServerClient();
+      const diag: any = {};
 
       // Query A: Simple select
-      console.log("[DIAG] Query A: .select('*')");
       const resA = await client.from("substations").select("*");
-      console.log("[DIAG-A] rows:", resA.data?.length ?? 0, "error:", resA.error?.message ?? "none", "ids:", resA.data?.map((r: any) => r.id).join(",") ?? "");
+      diag.queryA = {
+        rows: resA.data?.length ?? 0,
+        error: resA.error?.message ?? "none",
+        ids: resA.data?.map((r: any) => r.id).join(",") ?? "",
+      };
 
       // Query B: With transformers
-      console.log("[DIAG] Query B: .select('*, transformers(*)')");
       const resB = await client.from("substations").select("*, transformers(*)");
-      console.log("[DIAG-B] rows:", resB.data?.length ?? 0, "error:", resB.error?.message ?? "none", "ids:", resB.data?.map((r: any) => r.id).join(",") ?? "");
+      diag.queryB = {
+        rows: resB.data?.length ?? 0,
+        error: resB.error?.message ?? "none",
+        ids: resB.data?.map((r: any) => r.id).join(",") ?? "",
+      };
 
       // Query C: With feeders
-      console.log("[DIAG] Query C: .select('*, feeders(*)')");
       const resC = await client.from("substations").select("*, feeders(*)");
-      console.log("[DIAG-C] rows:", resC.data?.length ?? 0, "error:", resC.error?.message ?? "none", "ids:", resC.data?.map((r: any) => r.id).join(",") ?? "");
+      diag.queryC = {
+        rows: resC.data?.length ?? 0,
+        error: resC.error?.message ?? "none",
+        ids: resC.data?.map((r: any) => r.id).join(",") ?? "",
+      };
 
       // Query D: With both
-      console.log("[DIAG] Query D: .select('*, transformers(*), feeders(*)')");
       const resD = await client.from("substations").select("*, transformers(*), feeders(*)");
-      console.log("[DIAG-D] rows:", resD.data?.length ?? 0, "error:", resD.error?.message ?? "none", "ids:", resD.data?.map((r: any) => r.id).join(",") ?? "");
+      diag.queryD = {
+        rows: resD.data?.length ?? 0,
+        error: resD.error?.message ?? "none",
+        ids: resD.data?.map((r: any) => r.id).join(",") ?? "",
+      };
 
       const repo = new SubstationRepository(getServerClient());
       const portfolio = await repo.findAll(ctx.tenantId);
@@ -88,12 +101,19 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
         _provenance: makeProvenance("Supabase", now, portfolio.length > 0),
       };
 
-      return NextResponse.json(body, {
-        headers: {
-          "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
-          "X-Data-Source": dataSource,
-        },
-      });
+      return NextResponse.json(
+        { ...body, _diagnostic: diag },
+        {
+          headers: {
+            "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+            "X-Data-Source": dataSource,
+            "X-Diag-A": `rows:${diag.queryA.rows} error:${diag.queryA.error}`,
+            "X-Diag-B": `rows:${diag.queryB.rows} error:${diag.queryB.error}`,
+            "X-Diag-C": `rows:${diag.queryC.rows} error:${diag.queryC.error}`,
+            "X-Diag-D": `rows:${diag.queryD.rows} error:${diag.queryD.error}`,
+          },
+        }
+      );
     } catch (dbErr) {
       console.error("[api/substations] DB error, falling back to mock:", dbErr);
       console.log("[api/substations] Exception reason:", (dbErr as Error).message);
