@@ -9,6 +9,9 @@ import type {
 import type { SubstationPlan, FeederCircuit } from "@/lib/types";
 import type { TransformerAsset } from "@/lib/planning-engine";
 
+// TEMPORARY: Store last diagnostic info for API to read
+export let lastFindAllDiag: any = null;
+
 function toTransformer(row: DbTransformer): TransformerAsset {
   return {
     id: row.id,
@@ -107,13 +110,23 @@ export class SubstationRepository {
     console.log("RAW DATA COUNT", data?.length);
     console.log("FIRST RAW RECORD", data?.[0]);
 
+    lastFindAllDiag = {
+      rawDataCount: data?.length ?? 0,
+      firstRawRecord: data?.[0] ?? null,
+    };
+
     let mapped: SubstationPlan[];
     try {
       mapped = (data as DbSubstationWithRelations[]).map(toSubstationPlan);
       console.log("MAPPED COUNT", mapped.length);
       console.log("FIRST MAPPED", mapped[0]);
+      lastFindAllDiag.mappedCount = mapped.length;
+      lastFindAllDiag.firstMapped = mapped[0] ?? null;
+      lastFindAllDiag.mappingError = null;
     } catch (e) {
       console.error("MAPPING ERROR", e);
+      lastFindAllDiag.mappingError = String(e);
+      lastFindAllDiag.mappedCount = 0;
       throw e;
     }
 

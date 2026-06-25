@@ -9,7 +9,7 @@ import {
 } from "@/lib/enterprise-data";
 import { substations } from "@/lib/sample-data";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
-import { SubstationRepository } from "@/lib/db/repositories/substation.repository";
+import { SubstationRepository, lastFindAllDiag } from "@/lib/db/repositories/substation.repository";
 import { getCurrentTenant } from "@/lib/auth/tenant";
 import { makeProvenance, mockProvenance } from "@/lib/provenance";
 
@@ -102,7 +102,7 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
       };
 
       return NextResponse.json(
-        { ...body, _diagnostic: diag },
+        { ...body, _diagnostic: diag, _repositoryDiag: lastFindAllDiag },
         {
           headers: {
             "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
@@ -111,6 +111,9 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
             "X-Diag-B": `rows:${diag.queryB.rows} error:${diag.queryB.error}`,
             "X-Diag-C": `rows:${diag.queryC.rows} error:${diag.queryC.error}`,
             "X-Diag-D": `rows:${diag.queryD.rows} error:${diag.queryD.error}`,
+            "X-Repo-Raw-Count": String(lastFindAllDiag?.rawDataCount ?? "?"),
+            "X-Repo-Mapped-Count": String(lastFindAllDiag?.mappedCount ?? "?"),
+            "X-Repo-Mapping-Error": lastFindAllDiag?.mappingError ?? "none",
           },
         }
       );
