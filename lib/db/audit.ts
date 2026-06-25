@@ -18,7 +18,10 @@ export type AuditAction =
   | "tenant_create"
   | "tenant_update"
   | "settings_update"
-  | "data_export";
+  | "data_export"
+  | "subscription_create"
+  | "subscription_update"
+  | "subscription_cancel";
 
 export type ResourceType =
   | "user"
@@ -26,7 +29,8 @@ export type ResourceType =
   | "project"
   | "account"
   | "tenant"
-  | "settings";
+  | "settings"
+  | "subscription";
 
 export interface AuditLogEntry {
   tenantId: string;
