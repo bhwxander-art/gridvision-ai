@@ -33,17 +33,17 @@ export class AssetRelationshipRepository {
   }
 
   /**
-   * Returns the full dependency tree for a substation:
+   * Returns the full dependency tree for a substation (tenant-scoped):
    * its transformers, feeders, and open capital projects.
    * Returns null if the substation doesn't exist.
    */
-  async findAssetDependencies(substationId: string): Promise<AssetDependencies | null> {
-    const substation = await this.ss.findById(substationId);
+  async findAssetDependencies(substationId: string, tenantId: string): Promise<AssetDependencies | null> {
+    const substation = await this.ss.findById(substationId, tenantId);
     if (!substation) return null;
 
     // transformers and feeders are already embedded in SubstationPlan via findById
     const [capitalProjects] = await Promise.all([
-      this.cp.findBySubstation(substationId),
+      this.cp.findBySubstation(substationId, tenantId),
     ]);
 
     return {

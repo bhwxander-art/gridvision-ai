@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Zap } from "lucide-react";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { AssetRelationshipRepository } from "@/lib/db/repositories/asset-relationship.repository";
 import { AssetDigitalTwin } from "@/components/enterprise/asset-digital-twin";
 import { AssetDependencyPanel } from "@/components/enterprise/asset-dependency-panel";
@@ -27,8 +28,11 @@ export default async function SubstationDetailPage({
     return <NoDB />;
   }
 
+  const ctx = await getCurrentTenant();
+  if (!ctx) notFound();
+
   const repo = new AssetRelationshipRepository(getServerClient());
-  const deps = await repo.findAssetDependencies(id);
+  const deps = await repo.findAssetDependencies(id, ctx.tenantId);
 
   if (!deps) notFound();
 

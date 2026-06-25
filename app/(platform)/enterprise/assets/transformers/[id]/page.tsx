@@ -48,7 +48,7 @@ export default async function TransformerDetailPage({
   if (!transformer) notFound();
 
   const relRepo = new AssetRelationshipRepository(getServerClient());
-  const deps = await relRepo.findAssetDependencies(transformer.substationId);
+  const deps = await relRepo.findAssetDependencies(transformer.substationId, ctx.tenantId);
   if (!deps) notFound();
 
   const { substation, transformers, feeders, capitalProjects } = deps;

@@ -43,7 +43,7 @@ export default async function FeederDetailPage({
   if (!feeder) notFound();
 
   const relRepo = new AssetRelationshipRepository(getServerClient());
-  const deps = await relRepo.findAssetDependencies(feeder.substationId);
+  const deps = await relRepo.findAssetDependencies(feeder.substationId, ctx.tenantId);
   if (!deps) notFound();
 
   const { substation, transformers, feeders, capitalProjects } = deps;

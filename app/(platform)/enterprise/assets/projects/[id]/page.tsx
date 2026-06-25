@@ -41,7 +41,7 @@ export default async function ProjectDetailPage({
   if (!managedProject) notFound();
 
   const relRepo = new AssetRelationshipRepository(getServerClient());
-  const deps = await relRepo.findAssetDependencies(managedProject.substationId);
+  const deps = await relRepo.findAssetDependencies(managedProject.substationId, ctx.tenantId);
   if (!deps) notFound();
 
   const { substation, transformers, feeders, capitalProjects } = deps;
