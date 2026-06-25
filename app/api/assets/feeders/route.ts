@@ -23,7 +23,7 @@ export async function GET(): Promise<NextResponse> {
   if (!isDbConfigured()) return dbRequired();
   try {
     const repo = new FeederRepository(getServerClient());
-    const feeders = await repo.listManaged();
+    const feeders = await repo.listManaged(ctx.tenantId);
     return NextResponse.json({ feeders, count: feeders.length });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });
@@ -50,8 +50,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       queuedLoadMW: d.queuedLoadMW,
     };
     const repo = new FeederRepository(getServerClient());
-    await repo.upsert(feeder);
-    const created = await repo.findById(d.id);
+    await repo.upsert(feeder, ctx.tenantId);
+    const created = await repo.findById(d.id, ctx.tenantId);
     return NextResponse.json({ feeder: created }, { status: 201 });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });

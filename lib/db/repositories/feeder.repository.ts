@@ -34,61 +34,64 @@ function fromFeeder(f: FeederCircuit): Omit<DbFeeder, "created_at" | "updated_at
 export class FeederRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  /** Returns all feeder circuits for a given substation, ordered by name. */
-  async findBySubstationId(substationId: string): Promise<FeederCircuit[]> {
+  /** Returns all feeder circuits for a given substation (tenant-scoped). */
+  async findBySubstationId(substationId: string, tenantId: string): Promise<FeederCircuit[]> {
     const { data, error } = await this.client
       .from("feeders")
       .select("*")
       .eq("substation_id", substationId)
+      .eq("tenant_id", tenantId)
       .order("name");
 
     if (error) throw new Error(`[FeederRepository.findBySubstationId] ${error.message}`);
     return (data as DbFeeder[]).map(toFeeder);
   }
 
-  /** Returns all feeder circuits across all substations. */
-  async findAll(): Promise<FeederCircuit[]> {
+  /** Returns all feeder circuits for a specific tenant. */
+  async findAll(tenantId: string): Promise<FeederCircuit[]> {
     const { data, error } = await this.client
       .from("feeders")
       .select("*")
+      .eq("tenant_id", tenantId)
       .order("substation_id, name");
 
     if (error) throw new Error(`[FeederRepository.findAll] ${error.message}`);
     return (data as DbFeeder[]).map(toFeeder);
   }
 
-  /** Upserts a feeder record by id. */
-  async upsert(feeder: FeederCircuit): Promise<void> {
+  /** Upserts a feeder record (tenant-scoped). */
+  async upsert(feeder: FeederCircuit, tenantId: string): Promise<void> {
+    const record = { ...fromFeeder(feeder), tenant_id: tenantId };
     const { error } = await this.client
       .from("feeders")
-      .upsert(fromFeeder(feeder), { onConflict: "id" });
+      .upsert(record, { onConflict: "id" });
 
     if (error) throw new Error(`[FeederRepository.upsert] ${error.message}`);
   }
 
-  /**
-   * Updates committed and queued load on a feeder.
-   * Called after interconnection study decisions or feeder rebalancing.
-   */
+  /** Updates committed and queued load (tenant-scoped). */
   async updateLoad(
     id: string,
     committedLoadMW: number,
-    queuedLoadMW: number
+    queuedLoadMW: number,
+    tenantId: string
   ): Promise<void> {
     const { error } = await this.client
       .from("feeders")
       .update({ committed_load_mw: committedLoadMW, queued_load_mw: queuedLoadMW })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
 
     if (error) throw new Error(`[FeederRepository.updateLoad] ${error.message}`);
   }
 
-  /** Returns a single feeder by id, or null. */
-  async findById(id: string): Promise<FeederCircuit | null> {
+  /** Returns a single feeder by id (tenant-scoped). */
+  async findById(id: string, tenantId: string): Promise<FeederCircuit | null> {
     const { data, error } = await this.client
       .from("feeders")
       .select("*")
       .eq("id", id)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw new Error(`[FeederRepository.findById] ${error.message}`);
@@ -96,21 +99,23 @@ export class FeederRepository {
     return toFeeder(data as DbFeeder);
   }
 
-  /** Deletes a feeder by id. */
-  async delete(id: string): Promise<void> {
+  /** Deletes a feeder by id (tenant-scoped). */
+  async delete(id: string, tenantId: string): Promise<void> {
     const { error } = await this.client
       .from("feeders")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
 
     if (error) throw new Error(`[FeederRepository.delete] ${error.message}`);
   }
 
-  /** Returns all feeders with DB timestamps for the asset management UI. */
-  async listManaged(): Promise<(FeederCircuit & { createdAt: string; updatedAt: string })[]> {
+  /** Returns all feeders with DB timestamps (tenant-scoped). */
+  async listManaged(tenantId: string): Promise<(FeederCircuit & { createdAt: string; updatedAt: string })[]> {
     const { data, error } = await this.client
       .from("feeders")
       .select("*")
+      .eq("tenant_id", tenantId)
       .order("substation_id, name");
 
     if (error) throw new Error(`[FeederRepository.listManaged] ${error.message}`);

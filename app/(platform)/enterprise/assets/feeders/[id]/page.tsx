@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Zap } from "lucide-react";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { AssetRelationshipRepository } from "@/lib/db/repositories/asset-relationship.repository";
 import { FeederRepository } from "@/lib/db/repositories/feeder.repository";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +35,11 @@ export default async function FeederDetailPage({
   const { id } = await params;
   if (!isDbConfigured()) return <NoDB />;
 
+  const ctx = await getCurrentTenant();
+  if (!ctx) notFound();
+
   const fdRepo = new FeederRepository(getServerClient());
-  const feeder = await fdRepo.findById(id);
+  const feeder = await fdRepo.findById(id, ctx.tenantId);
   if (!feeder) notFound();
 
   const relRepo = new AssetRelationshipRepository(getServerClient());

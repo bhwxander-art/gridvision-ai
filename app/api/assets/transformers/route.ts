@@ -23,7 +23,7 @@ export async function GET(): Promise<NextResponse> {
   if (!isDbConfigured()) return dbRequired();
   try {
     const repo = new TransformerRepository(getServerClient());
-    const transformers = await repo.listManaged();
+    const transformers = await repo.listManaged(ctx.tenantId);
     return NextResponse.json({ transformers, count: transformers.length });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });
@@ -49,8 +49,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       loadFactor: d.loadFactor, ageYears: d.ageYears, n1Compliant: d.n1Compliant,
     };
     const repo = new TransformerRepository(getServerClient());
-    await repo.upsert(tx);
-    const created = await repo.findById(d.id);
+    await repo.upsert(tx, ctx.tenantId);
+    const created = await repo.findById(d.id, ctx.tenantId);
     return NextResponse.json({ transformer: created }, { status: 201 });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });

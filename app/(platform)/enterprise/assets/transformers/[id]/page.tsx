@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Server } from "lucide-react";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { AssetRelationshipRepository } from "@/lib/db/repositories/asset-relationship.repository";
 import { TransformerRepository } from "@/lib/db/repositories/transformer.repository";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +40,11 @@ export default async function TransformerDetailPage({
     return <NoDB />;
   }
 
+  const ctx = await getCurrentTenant();
+  if (!ctx) notFound();
+
   const txRepo = new TransformerRepository(getServerClient());
-  const transformer = await txRepo.findById(id);
+  const transformer = await txRepo.findById(id, ctx.tenantId);
   if (!transformer) notFound();
 
   const relRepo = new AssetRelationshipRepository(getServerClient());

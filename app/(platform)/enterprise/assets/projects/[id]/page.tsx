@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CircleDollarSign } from "lucide-react";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { AssetRelationshipRepository } from "@/lib/db/repositories/asset-relationship.repository";
 import { CapitalProjectRepository } from "@/lib/db/repositories/capital-project.repository";
 import { Badge } from "@/components/ui/badge";
@@ -32,8 +33,11 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   if (!isDbConfigured()) return <NoDB />;
 
+  const ctx = await getCurrentTenant();
+  if (!ctx) notFound();
+
   const cpRepo = new CapitalProjectRepository(getServerClient());
-  const managedProject = await cpRepo.listManaged().then((list) => list.find((p) => p.id === id));
+  const managedProject = await cpRepo.listManaged(ctx.tenantId).then((list) => list.find((p) => p.id === id));
   if (!managedProject) notFound();
 
   const relRepo = new AssetRelationshipRepository(getServerClient());

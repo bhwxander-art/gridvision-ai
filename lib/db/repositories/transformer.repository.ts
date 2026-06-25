@@ -38,57 +38,59 @@ function fromTransformer(tx: TransformerAsset): Omit<DbTransformer, "created_at"
 export class TransformerRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  /** Returns all transformers for a given substation, ordered by name. */
-  async findBySubstationId(substationId: string): Promise<TransformerAsset[]> {
+  /** Returns all transformers for a given substation (tenant-scoped). */
+  async findBySubstationId(substationId: string, tenantId: string): Promise<TransformerAsset[]> {
     const { data, error } = await this.client
       .from("transformers")
       .select("*")
       .eq("substation_id", substationId)
+      .eq("tenant_id", tenantId)
       .order("name");
 
     if (error) throw new Error(`[TransformerRepository.findBySubstationId] ${error.message}`);
     return (data as DbTransformer[]).map(toTransformer);
   }
 
-  /** Returns every transformer across all substations. */
-  async findAll(): Promise<TransformerAsset[]> {
+  /** Returns every transformer for a specific tenant. */
+  async findAll(tenantId: string): Promise<TransformerAsset[]> {
     const { data, error } = await this.client
       .from("transformers")
       .select("*")
+      .eq("tenant_id", tenantId)
       .order("substation_id, name");
 
     if (error) throw new Error(`[TransformerRepository.findAll] ${error.message}`);
     return (data as DbTransformer[]).map(toTransformer);
   }
 
-  /** Upserts a transformer record by id. */
-  async upsert(tx: TransformerAsset): Promise<void> {
+  /** Upserts a transformer record (tenant-scoped). */
+  async upsert(tx: TransformerAsset, tenantId: string): Promise<void> {
+    const record = { ...fromTransformer(tx), tenant_id: tenantId };
     const { error } = await this.client
       .from("transformers")
-      .upsert(fromTransformer(tx), { onConflict: "id" });
+      .upsert(record, { onConflict: "id" });
 
     if (error) throw new Error(`[TransformerRepository.upsert] ${error.message}`);
   }
 
-  /**
-   * Updates the peak load reading for a transformer.
-   * Called by SCADA ingestion when real-time MVA is available.
-   */
-  async updatePeakLoad(id: string, peakLoadMVA: number): Promise<void> {
+  /** Updates peak load (tenant-scoped). */
+  async updatePeakLoad(id: string, peakLoadMVA: number, tenantId: string): Promise<void> {
     const { error } = await this.client
       .from("transformers")
       .update({ peak_load_mva: peakLoadMVA })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
 
     if (error) throw new Error(`[TransformerRepository.updatePeakLoad] ${error.message}`);
   }
 
-  /** Returns a single transformer by id, or null. */
-  async findById(id: string): Promise<TransformerAsset | null> {
+  /** Returns a single transformer by id (tenant-scoped). */
+  async findById(id: string, tenantId: string): Promise<TransformerAsset | null> {
     const { data, error } = await this.client
       .from("transformers")
       .select("*")
       .eq("id", id)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw new Error(`[TransformerRepository.findById] ${error.message}`);
@@ -96,21 +98,23 @@ export class TransformerRepository {
     return toTransformer(data as DbTransformer);
   }
 
-  /** Deletes a transformer by id. */
-  async delete(id: string): Promise<void> {
+  /** Deletes a transformer by id (tenant-scoped). */
+  async delete(id: string, tenantId: string): Promise<void> {
     const { error } = await this.client
       .from("transformers")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
 
     if (error) throw new Error(`[TransformerRepository.delete] ${error.message}`);
   }
 
-  /** Returns all transformers with DB timestamps for the asset management UI. */
-  async listManaged(): Promise<(TransformerAsset & { createdAt: string; updatedAt: string })[]> {
+  /** Returns all transformers with DB timestamps (tenant-scoped). */
+  async listManaged(tenantId: string): Promise<(TransformerAsset & { createdAt: string; updatedAt: string })[]> {
     const { data, error } = await this.client
       .from("transformers")
       .select("*")
+      .eq("tenant_id", tenantId)
       .order("substation_id, name");
 
     if (error) throw new Error(`[TransformerRepository.listManaged] ${error.message}`);
