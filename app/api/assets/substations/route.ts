@@ -57,8 +57,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       transformers: [], feeders: [],
     };
     const repo = new SubstationRepository(getServerClient());
-    await repo.upsert(ss);
-    const created = await repo.findById(d.id);
+    await repo.upsert(ss, ctx.tenantId);
+    const created = await repo.findById(d.id, ctx.tenantId);
     return NextResponse.json({ substation: created }, { status: 201 });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });

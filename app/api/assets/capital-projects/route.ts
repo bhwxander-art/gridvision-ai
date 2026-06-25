@@ -50,8 +50,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       riskReduction: d.riskReduction, priorityScore: d.priorityScore,
     };
     const repo = new CapitalProjectRepository(getServerClient());
-    await repo.upsert(project, d.status);
-    const created = await repo.findById(d.id);
+    await repo.upsert(project, d.status, ctx.tenantId);
+    const created = await repo.findById(d.id, ctx.tenantId);
     return NextResponse.json({ project: created }, { status: 201 });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });

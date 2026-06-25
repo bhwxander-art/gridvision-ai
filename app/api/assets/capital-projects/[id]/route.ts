@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { CapitalProjectRepository } from "@/lib/db/repositories/capital-project.repository";
 import {
   CapitalProjectPatchSchema,
@@ -18,6 +19,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   if (!isDbConfigured()) return dbRequired();
+  const ctx = await getCurrentTenant();
+  if (!ctx) return NextResponse.json<ApiError>({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   try {
     const body = await req.json();
@@ -26,13 +29,13 @@ export async function PATCH(
       return NextResponse.json(zodErrorToApiError(parsed.error), { status: 422 });
     }
     const repo = new CapitalProjectRepository(getServerClient());
-    const existing = await repo.findById(id);
+    const existing = await repo.findById(id, ctx.tenantId);
     if (!existing) {
       return NextResponse.json<ApiError>({ error: "Capital project not found" }, { status: 404 });
     }
     const merged = { ...existing, ...parsed.data, id };
-    await repo.upsert(merged, parsed.data.status ?? "planned");
-    const updated = await repo.findById(id);
+    await repo.upsert(merged, parsed.data.status ?? "planned", ctx.tenantId);
+    const updated = await repo.findById(id, ctx.tenantId);
     return NextResponse.json({ project: updated });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });
@@ -44,14 +47,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   if (!isDbConfigured()) return dbRequired();
+  const ctx = await getCurrentTenant();
+  if (!ctx) return NextResponse.json<ApiError>({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   try {
     const repo = new CapitalProjectRepository(getServerClient());
-    const existing = await repo.findById(id);
+    const existing = await repo.findById(id, ctx.tenantId);
     if (!existing) {
       return NextResponse.json<ApiError>({ error: "Capital project not found" }, { status: 404 });
     }
-    await repo.delete(id);
+    await repo.delete(id, ctx.tenantId);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     return NextResponse.json<ApiError>({ error: String(err) }, { status: 500 });
