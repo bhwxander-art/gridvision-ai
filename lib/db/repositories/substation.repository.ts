@@ -103,7 +103,22 @@ export class SubstationRepository {
       .order("name");
 
     if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
-    return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
+
+    console.log("RAW DATA COUNT", data?.length);
+    console.log("FIRST RAW RECORD", data?.[0]);
+
+    let mapped: SubstationPlan[];
+    try {
+      mapped = (data as DbSubstationWithRelations[]).map(toSubstationPlan);
+      console.log("MAPPED COUNT", mapped.length);
+      console.log("FIRST MAPPED", mapped[0]);
+    } catch (e) {
+      console.error("MAPPING ERROR", e);
+      throw e;
+    }
+
+    console.log("[findAll] returning", mapped.length, "substations");
+    return mapped;
   }
 
   async upsert(ss: SubstationPlan, tenantId: string): Promise<void> {
