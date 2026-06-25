@@ -66,7 +66,12 @@ async function fetchEia(url: string): Promise<EiaDataPoint[]> {
     throw new Error(`EIA API error ${res.status}: ${body.slice(0, 200)}`);
   }
 
-  const json: EiaResponse = await res.json();
+  let json: EiaResponse;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`EIA API returned non-JSON response (status ${res.status})`);
+  }
   const points = json?.response?.data ?? [];
 
   if (!Array.isArray(points)) {

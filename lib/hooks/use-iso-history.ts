@@ -39,7 +39,9 @@ export function useIsoHistory(
             (body as { error?: string }).error ?? `HTTP ${res.status}`
           );
         }
-        return res.json() as Promise<{ readings: IsoReadingPoint[] }>;
+        return res.json().catch(() => {
+          throw new Error("Invalid JSON in history response");
+        }) as Promise<{ readings: IsoReadingPoint[] }>;
       })
       .then((data) => {
         setReadings(data.readings ?? []);

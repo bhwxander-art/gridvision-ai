@@ -68,7 +68,11 @@ async function fetchIsone(path: string): Promise<IsoNeSingleResponse> {
     throw new Error(`ISO-NE API error ${res.status}: ${body.slice(0, 200)}`);
   }
 
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(`ISO-NE API returned non-JSON response (status ${res.status})`);
+  }
 }
 
 function toReading(load: IsoNeLoad): LoadReading {

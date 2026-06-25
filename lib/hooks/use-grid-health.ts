@@ -31,7 +31,9 @@ export function useGridHealth(refetchIntervalMs = 120_000): UseGridHealthResult 
             (body as { error?: string }).error ?? `HTTP ${res.status}`
           );
         }
-        return res.json() as Promise<GridHealthResult>;
+        return res.json().catch(() => {
+          throw new Error("Invalid JSON in health-score response");
+        }) as Promise<GridHealthResult>;
       })
       .then((data) => {
         setResult(data);

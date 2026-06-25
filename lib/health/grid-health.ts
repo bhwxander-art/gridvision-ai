@@ -68,7 +68,8 @@ function factorCapacityHeadroom(
   currentMW: number,
   capacityMW: number
 ): HealthFactor {
-  const util = currentMW / capacityMW;
+  const safeCap = capacityMW > 0 ? capacityMW : DEFAULT_CAPACITY_MW;
+  const util = currentMW / safeCap;
   let score: number;
 
   if (util <= 0.70) {
@@ -85,7 +86,7 @@ function factorCapacityHeadroom(
     label: "Capacity Headroom",
     score,
     weight: WEIGHTS.capacityHeadroom,
-    detail: `${pct}% of ${(capacityMW / 1_000).toFixed(0)} GW reference capacity`,
+    detail: `${pct}% of ${safeCap.toLocaleString()} MW reference capacity`,
   };
 }
 
@@ -143,6 +144,15 @@ function factorDemandDeviation(
   }
 
   const avg = history.reduce((s, r) => s + r.currentLoadMW, 0) / history.length;
+  if (avg === 0) {
+    return {
+      id: "demand-deviation",
+      label: "Demand Deviation",
+      score: NEUTRAL_SCORE,
+      weight: WEIGHTS.demandDeviation,
+      detail: "Rolling average is zero — cannot compute deviation",
+    };
+  }
   const deviation = Math.abs(currentMW - avg) / avg;
   const score = Math.round(clamp(100 - (deviation / MAX_DEVIATION) * 100, 0, 100));
   const sign = currentMW >= avg ? "+" : "";

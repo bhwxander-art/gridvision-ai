@@ -137,14 +137,12 @@ export default function DashboardPage() {
   const high24h = readings.length > 0 ? Math.max(...readings.map((r) => r.currentLoadMW)) : null;
   const low24h  = readings.length > 0 ? Math.min(...readings.map((r) => r.currentLoadMW)) : null;
 
-  const alertInput = liveLoad
-    ? { timestamp: liveLoad.timestamp, currentLoadMW: liveLoad.current_load_mw }
-    : null;
-  const alerts = useMemo(
-    () => generateAlerts(alertInput, readings),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [liveLoad, readings]
-  );
+  const alerts = useMemo(() => {
+    const current = liveLoad
+      ? { timestamp: liveLoad.timestamp, currentLoadMW: liveLoad.current_load_mw }
+      : null;
+    return generateAlerts(current, readings);
+  }, [liveLoad, readings]);
 
   const topAlert = alerts[0] ?? null;
 

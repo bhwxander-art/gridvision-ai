@@ -9,10 +9,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  const hours = Math.min(
-    Math.max(1, parseInt(request.nextUrl.searchParams.get("hours") ?? "24", 10)),
-    168
-  );
+  const parsed = parseInt(request.nextUrl.searchParams.get("hours") ?? "24", 10);
+  const hours = isNaN(parsed) ? 24 : Math.min(Math.max(1, parsed), 168);
 
   try {
     const repo = new LoadRepository(getServerClient());

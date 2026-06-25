@@ -32,10 +32,11 @@ export class LoadRepository {
     if (error) throw new Error(`[LoadRepository.getCurrent] ${error.message}`);
     if (!data) return null;
 
+    const rec = data as IsoLoadRecord;
     return {
-      currentLoadMW: Number(data.actual_load_mw),
-      forecastLoadMW: Number(data.forecast_load_mw),
-      timestamp: data.timestamp,
+      currentLoadMW: rec.actual_load_mw ?? 0,
+      forecastLoadMW: rec.forecast_load_mw ?? 0,
+      timestamp: rec.timestamp,
     };
   }
 
@@ -54,9 +55,9 @@ export class LoadRepository {
     if (error) throw new Error(`[LoadRepository.getHistory] ${error.message}`);
     if (!data) return [];
 
-    return data.map((row: any) => ({
-      currentLoadMW: Number(row.actual_load_mw),
-      forecastLoadMW: Number(row.forecast_load_mw),
+    return (data as IsoLoadRecord[]).map((row) => ({
+      currentLoadMW: row.actual_load_mw ?? 0,
+      forecastLoadMW: row.forecast_load_mw ?? 0,
       timestamp: row.timestamp,
     }));
   }
