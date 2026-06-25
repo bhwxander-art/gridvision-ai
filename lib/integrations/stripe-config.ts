@@ -1,11 +1,9 @@
 import "server-only";
+import crypto from "crypto";
 
 /**
  * Stripe Configuration for Production Billing
- * Replaces mock billing with real Stripe integration
- *
- * To enable real Stripe: npm install stripe
- * Set environment variables: STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY
+ * Real webhook verification and security measures
  */
 
 const stripeKey = process.env.STRIPE_SECRET_KEY || "";
@@ -16,8 +14,8 @@ if (!stripeKey && process.env.NODE_ENV === "production") {
   throw new Error("STRIPE_SECRET_KEY is required in production");
 }
 
-// Stub Stripe client for development/demo purposes
-// In production, import real Stripe SDK
+// Stripe client - import real SDK when available
+// Stub for now but structured for real SDK replacement
 export const stripe = {
   checkout: {
     sessions: {
@@ -49,13 +47,6 @@ export const stripe = {
       deleted: true,
     }),
   },
-  webhooks: {
-    constructEvent: (body: any, sig: string, secret: string) => ({
-      id: `evt_${Date.now()}`,
-      type: "payment_intent.succeeded",
-      data: { object: {} },
-    }),
-  },
 } as any;
 
 export const STRIPE_CONFIG = {
@@ -65,9 +56,75 @@ export const STRIPE_CONFIG = {
   isConfigured: Boolean(stripeKey && publishableKey),
 };
 
+// Webhook signature verification
+export function verifyWebhookSignature(body: string | Buffer, signature: string): {
+  id: string;
+  type: string;
+  data: any;
+  created: number;
+} {
+  if (!webhookSecret) {
+    throw new Error("STRIPE_WEBHOOK_SECRET not configured");
+  }
+
+  // Parse signature header
+  const signatureComponents = (signature || "").split(",");
+  let timestamp: string | null = null;
+  let signedContent: string | null = null;
+
+  for (const component of signatureComponents) {
+    const [key, value] = component.split("=");
+    if (key === "t") timestamp = value;
+    if (key === "v1") signedContent = value;
+  }
+
+  if (!timestamp || !signedContent) {
+    throw new Error("Invalid Stripe signature format");
+  }
+
+  // Prevent replay attacks - check timestamp is recent (within 5 minutes)
+  const requestTime = parseInt(timestamp, 10);
+  const currentTime = Math.floor(Date.now() / 1000);
+  const timeDifference = Math.abs(currentTime - requestTime);
+
+  if (timeDifference > 300) { // 5 minutes
+    throw new Error("Webhook timestamp too old - possible replay attack");
+  }
+
+  // Verify signature
+  const bodyString = typeof body === "string" ? body : body.toString("utf8");
+  const signedData = `${timestamp}.${bodyString}`;
+
+  const expectedSignature = crypto
+    .createHmac("sha256", webhookSecret)
+    .update(signedData)
+    .digest("hex");
+
+  if (signedContent !== expectedSignature) {
+    throw new Error("Invalid Stripe webhook signature");
+  }
+
+  try {
+    return JSON.parse(bodyString);
+  } catch {
+    throw new Error("Invalid JSON in webhook body");
+  }
+}
+
+// Idempotency tracking (in-memory for now, should use Redis in production)
+const processedEvents = new Set<string>();
+
+export function isWebhookProcessed(eventId: string): boolean {
+  return processedEvents.has(eventId);
+}
+
+export function markWebhookProcessed(eventId: string): void {
+  processedEvents.add(eventId);
+  // In production, also store in Redis with TTL of 24 hours
+}
+
 /**
- * Stripe Product and Price IDs (created in Stripe Dashboard)
- * These should be created manually in Stripe and stored as env vars
+ * Stripe Product and Price IDs
  */
 export const STRIPE_PRODUCTS = {
   starter: {
@@ -93,9 +150,6 @@ export const STRIPE_PRODUCTS = {
   },
 };
 
-/**
- * Get Stripe price ID for a plan
- */
 export function getStripePriceId(
   plan: "starter" | "professional" | "enterprise",
   cycle: "monthly" | "annual"
@@ -107,9 +161,6 @@ export function getStripePriceId(
   return price;
 }
 
-/**
- * Create Stripe Checkout Session for subscription
- */
 export async function createCheckoutSession(
   customerId: string,
   plan: "starter" | "professional" | "enterprise",
@@ -139,9 +190,6 @@ export async function createCheckoutSession(
   });
 }
 
-/**
- * Create Stripe Customer for a tenant
- */
 export async function createStripeCustomer(
   tenantId: string,
   email: string,
@@ -156,16 +204,10 @@ export async function createStripeCustomer(
   });
 }
 
-/**
- * Get Stripe Subscription
- */
 export async function getStripeSubscription(subscriptionId: string): Promise<any> {
   return stripe.subscriptions.retrieve(subscriptionId);
 }
 
-/**
- * Update Stripe Subscription (change plan)
- */
 export async function updateStripeSubscription(
   subscriptionId: string,
   newPriceId: string
@@ -184,9 +226,6 @@ export async function updateStripeSubscription(
   });
 }
 
-/**
- * Cancel Stripe Subscription
- */
 export async function cancelStripeSubscription(
   subscriptionId: string,
   atPeriodEnd = true
@@ -198,11 +237,4 @@ export async function cancelStripeSubscription(
   } else {
     return stripe.subscriptions.del(subscriptionId);
   }
-}
-
-/**
- * Verify Stripe Webhook Signature
- */
-export function verifyWebhookSignature(body: string | Buffer, signature: string): any {
-  return stripe.webhooks.constructEvent(body, signature, webhookSecret);
 }

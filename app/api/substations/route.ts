@@ -25,8 +25,11 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
   if (isDbConfigured()) {
     try {
       const ctx = await getCurrentTenant();
+      if (!ctx) {
+        throw new Error("Tenant context required");
+      }
       const repo = new SubstationRepository(getServerClient());
-      const portfolio = await repo.findAll(ctx?.tenantId);
+      const portfolio = await repo.findAll(ctx.tenantId);
 
       const simple: Substation[] = portfolio.map((ss) => {
         const util = ss.peakLoadMW / ss.nameplateMVA;

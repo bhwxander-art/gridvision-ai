@@ -9,8 +9,6 @@ import type {
 import type { SubstationPlan, FeederCircuit } from "@/lib/types";
 import type { TransformerAsset } from "@/lib/planning-engine";
 
-// ── Row → domain mappers (pure) ───────────────────────────────────────────────
-
 function toTransformer(row: DbTransformer): TransformerAsset {
   return {
     id: row.id,
@@ -52,8 +50,6 @@ function toSubstationPlan(row: DbSubstationWithRelations): SubstationPlan {
   };
 }
 
-// ── Domain → row mapper (for writes) ─────────────────────────────────────────
-
 function fromSubstationPlan(ss: SubstationPlan): Omit<DbSubstation, "created_at" | "updated_at"> {
   return {
     id: ss.id,
@@ -69,91 +65,15 @@ function fromSubstationPlan(ss: SubstationPlan): Omit<DbSubstation, "created_at"
   };
 }
 
-// ── Repository class ──────────────────────────────────────────────────────────
-
 export class SubstationRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  /**
-   * Returns all substations with their transformers and feeders.
-   * Ordered alphabetically by name.
-   * Pass tenantId to scope to a specific tenant.
-   */
-  async findAll(tenantId?: string): Promise<SubstationPlan[]> {
-    let q = this.client
-      .from("substations")
-      .select("*, transformers(*), feeders(*)")
-      .order("name");
-
-    if (tenantId) q = q.eq("tenant_id", tenantId);
-
-    const { data, error } = await q;
-
-    if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
-    return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
-  }
-
-  /**
-   * Returns a single substation with its transformers and feeders,
-   * or null if no matching row exists.
-   */
-  async findById(id: string): Promise<SubstationPlan | null> {
+  async listManaged(tenantId: string): Promise<(SubstationPlan & { createdAt: string; updatedAt: string })[]> {
     const { data, error } = await this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) throw new Error(`[SubstationRepository.findById] ${error.message}`);
-    if (!data) return null;
-    return toSubstationPlan(data as DbSubstationWithRelations);
-  }
-
-  /**
-   * Upserts a substation record (without its child transformers/feeders).
-   * Use TransformerRepository and FeederRepository to manage children.
-   */
-  async upsert(ss: SubstationPlan): Promise<void> {
-    const { error } = await this.client
-      .from("substations")
-      .upsert(fromSubstationPlan(ss), { onConflict: "id" });
-
-    if (error) throw new Error(`[SubstationRepository.upsert] ${error.message}`);
-  }
-
-  /**
-   * Updates only the real-time load reading for a substation.
-   * Called by SCADA ingestion pipelines.
-   */
-  async updatePeakLoad(id: string, peakLoadMW: number): Promise<void> {
-    const { error } = await this.client
-      .from("substations")
-      .update({ peak_load_mw: peakLoadMW })
-      .eq("id", id);
-
-    if (error) throw new Error(`[SubstationRepository.updatePeakLoad] ${error.message}`);
-  }
-
-  /** Deletes a substation by id (cascades to transformers and feeders). */
-  async delete(id: string): Promise<void> {
-    const { error } = await this.client
-      .from("substations")
-      .delete()
-      .eq("id", id);
-
-    if (error) throw new Error(`[SubstationRepository.delete] ${error.message}`);
-  }
-
-  /** Returns all substations with DB timestamps for the asset management UI. */
-  async listManaged(tenantId?: string): Promise<(SubstationPlan & { createdAt: string; updatedAt: string })[]> {
-    let q = this.client
-      .from("substations")
-      .select("*, transformers(*), feeders(*)")
+      .eq("tenant_id", tenantId)
       .order("name");
-
-    if (tenantId) q = q.eq("tenant_id", tenantId);
-
-    const { data, error } = await q;
 
     if (error) throw new Error(`[SubstationRepository.listManaged] ${error.message}`);
     return (data as (DbSubstationWithRelations & { created_at: string; updated_at: string })[]).map(
@@ -163,5 +83,48 @@ export class SubstationRepository {
         updatedAt: row.updated_at,
       })
     );
+  }
+
+  async findById(id: string, tenantId: string): Promise<SubstationPlan | null> {
+    const { data, error } = await this.client
+      .from("substations")
+      .select("*, transformers(*), feeders(*)")
+      .eq("id", id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error) throw new Error(`[SubstationRepository.findById] ${error.message}`);
+    if (!data) return null;
+    return toSubstationPlan(data as DbSubstationWithRelations);
+  }
+
+  async findAll(tenantId: string): Promise<SubstationPlan[]> {
+    const { data, error } = await this.client
+      .from("substations")
+      .select("*, transformers(*), feeders(*)")
+      .eq("tenant_id", tenantId)
+      .order("name");
+
+    if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
+    return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
+  }
+
+  async upsert(ss: SubstationPlan, tenantId: string): Promise<void> {
+    const row = { ...fromSubstationPlan(ss), tenant_id: tenantId };
+    const { error } = await this.client
+      .from("substations")
+      .upsert(row, { onConflict: "id" });
+
+    if (error) throw new Error(`[SubstationRepository.upsert] ${error.message}`);
+  }
+
+  async delete(id: string, tenantId: string): Promise<void> {
+    const { error } = await this.client
+      .from("substations")
+      .delete()
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
+
+    if (error) throw new Error(`[SubstationRepository.delete] ${error.message}`);
   }
 }

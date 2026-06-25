@@ -45,7 +45,7 @@ export default async function ProjectDetailPage({
   if (!deps) notFound();
 
   const { substation, transformers, feeders, capitalProjects } = deps;
-  const status = managedProject.status ?? "planned";
+  const status: DbProjectStatus = (managedProject.status as DbProjectStatus) ?? "planned";
   const costPerMW = managedProject.addedCapacityMW > 0
     ? Math.round(managedProject.estimatedCostUSD / managedProject.addedCapacityMW / 1_000)
     : 0;
