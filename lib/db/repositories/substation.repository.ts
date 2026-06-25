@@ -72,7 +72,6 @@ export class SubstationRepository {
     const { data, error } = await this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
-      .eq("tenant_id", tenantId)
       .order("name");
 
     if (error) throw new Error(`[SubstationRepository.listManaged] ${error.message}`);
@@ -90,7 +89,6 @@ export class SubstationRepository {
       .from("substations")
       .select("*, transformers(*), feeders(*)")
       .eq("id", id)
-      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw new Error(`[SubstationRepository.findById] ${error.message}`);
@@ -102,7 +100,6 @@ export class SubstationRepository {
     const { data, error } = await this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
-      .eq("tenant_id", tenantId)
       .order("name");
 
     if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
