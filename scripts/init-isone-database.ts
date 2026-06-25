@@ -1,32 +1,42 @@
 #!/usr/bin/env node
 /**
- * Import real ISO-NE load data into Supabase
+ * Backfill ISO-NE load data from EIA Open Data into Supabase
  *
- * Downloads official ISO-NE Real-Time Five-Minute System Load data
- * from https://www.iso-ne.com/isoexpress/ and imports into iso_load_history
+ * Data source: U.S. Energy Information Administration Form 930 (Hourly)
+ * Endpoint:    https://api.eia.gov/v2/electricity/rto/region-data/data/
+ * Respondent:  ISNE (ISO New England)
+ * License:     U.S. government open data — no commercial restrictions
  *
- * Official Data Source:
- *   https://www.iso-ne.com/isoexpress/
- *   File: rt_fiveminsysload_YYYYMMDD.csv (5-minute interval data)
+ * Required env vars:
+ *   EIA_API_KEY              — free at https://www.eia.gov/opendata/
+ *   NEXT_PUBLIC_SUPABASE_URL — Supabase project URL
+ *   SUPABASE_SERVICE_ROLE_KEY — Supabase service role key (bypasses RLS)
  *
  * Usage:
- *   npx tsx scripts/init-isone-database.ts              # Last 3 days
- *   npx tsx scripts/init-isone-database.ts --date 2026-06-25
- *   npx tsx scripts/init-isone-database.ts --days 7
+ *   npx tsx scripts/init-isone-database.ts              # Last 7 days
+ *   npx tsx scripts/init-isone-database.ts --days 30
+ *   npx tsx scripts/init-isone-database.ts --date 2026-06-20
  *   npx tsx scripts/init-isone-database.ts --dry-run
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { EIAProvider } from "../lib/providers/eia.provider";
 
-// ── Supabase Setup ─────────────────────────────────────────────────────────
+// ── Prerequisites ──────────────────────────────────────────────────────────
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Error: Missing Supabase environment variables");
-  console.error("   NEXT_PUBLIC_SUPABASE_URL");
-  console.error("   SUPABASE_SERVICE_ROLE_KEY");
+  console.error("❌ Missing Supabase environment variables:");
+  if (!SUPABASE_URL) console.error("   NEXT_PUBLIC_SUPABASE_URL is not set");
+  if (!SUPABASE_KEY) console.error("   SUPABASE_SERVICE_ROLE_KEY is not set");
+  process.exit(1);
+}
+
+if (!process.env.EIA_API_KEY) {
+  console.error("❌ EIA_API_KEY is not set");
+  console.error("   Get a free key at https://www.eia.gov/opendata/");
   process.exit(1);
 }
 
@@ -34,188 +44,31 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// ── ISO-NE Official Data Source ────────────────────────────────────────────
-
-const ISO_NE_BASE = "https://www.iso-ne.com/static-assets/documents";
-const TZ_OFFSET = "-04:00"; // EDT (summer); use -05:00 for EST
-
-/**
- * Formats a date as YYYYMMDD for ISO-NE CSV filename
- */
-function formatDateForFilename(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}${mm}${dd}`;
-}
-
-/**
- * Constructs ISO-NE isoexpress CSV download URL for a given date
- */
-function getIsoNeUrl(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dateStr = formatDateForFilename(date);
-  return `${ISO_NE_BASE}/${yyyy}/${mm}/rt_fiveminsysload_${dateStr}.csv`;
-}
-
-/**
- * Converts "MM/DD/YYYY HH:mm:ss" to ISO 8601 with timezone offset
- */
-function parseIsoNeDate(raw: string, tzOffset: string): string {
-  const match = raw.match(
-    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/
-  );
-  if (!match) throw new Error(`Invalid date format: "${raw}"`);
-  const [, mm, dd, yyyy, hh, min, ss] = match;
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}${tzOffset}`;
-}
-
-/**
- * CSV line splitter respecting quoted fields
- */
-function splitCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQ = !inQ;
-      }
-    } else if (ch === "," && !inQ) {
-      fields.push(cur.trim());
-      cur = "";
-    } else {
-      cur += ch;
-    }
-  }
-  fields.push(cur.trim());
-  return fields;
-}
-
-function stripQuotes(s: string): string {
-  s = s.trim();
-  if (s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"') {
-    return s.slice(1, -1);
-  }
-  return s;
-}
-
-/**
- * Fetch and parse real ISO-NE CSV data from official source
- */
-async function fetchAndParseIsoNeData(date: Date): Promise<
-  Array<{
-    timestamp: string;
-    actual_load_mw: number;
-    forecast_load_mw: number;
-  }>
-> {
-  const url = getIsoNeUrl(date);
-  console.log(`📥 Downloading from: ${url}`);
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const csvText = await response.text();
-    const records: Array<{
-      timestamp: string;
-      actual_load_mw: number;
-      forecast_load_mw: number;
-    }> = [];
-
-    const lines = csvText.split(/\r?\n/);
-    let dataRows = 0;
-    let errors = 0;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      const parts = splitCsvLine(trimmed);
-      const rowTag = stripQuotes(parts[0] ?? "").toUpperCase();
-
-      // Skip comments and headers
-      if (rowTag === "C" || rowTag === "H") continue;
-      if (rowTag !== "D") continue;
-
-      dataRows++;
-
-      const rawDateTime = parts[1] ? stripQuotes(parts[1]) : "";
-      const rawNativeLoad = parts[3] ? stripQuotes(parts[3]) : ""; // Col 3 = Native Load MW
-
-      if (!rawDateTime || !rawNativeLoad) {
-        errors++;
-        continue;
-      }
-
-      const actualLoad = parseFloat(rawNativeLoad);
-      if (isNaN(actualLoad)) {
-        errors++;
-        continue;
-      }
-
-      let timestamp: string;
-      try {
-        timestamp = parseIsoNeDate(rawDateTime, TZ_OFFSET);
-      } catch {
-        errors++;
-        continue;
-      }
-
-      // No forecast in official 5-min data — use actual as placeholder
-      records.push({
-        timestamp,
-        actual_load_mw: Math.round(actualLoad),
-        forecast_load_mw: Math.round(actualLoad),
-      });
-    }
-
-    console.log(`   ✅ ${dataRows} data rows, ${errors} parse errors`);
-    if (records.length === 0) {
-      throw new Error("No valid data rows found in CSV");
-    }
-
-    return records;
-  } catch (err) {
-    throw new Error(
-      `Failed to fetch ISO-NE data: ${(err as Error).message}`
-    );
-  }
-}
-
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log("\n🌐 ISO-NE Real Load Data Import");
+  console.log("\n🌐 EIA → ISO New England Load Data Backfill");
   console.log("═".repeat(60));
-  console.log(`Official Source: https://www.iso-ne.com/isoexpress/`);
-  console.log(`Data Type: Real-Time Five-Minute System Load (native load)`);
+  console.log("Source:      EIA Form 930 – Hourly Electric Grid Monitor");
+  console.log("Respondent:  ISNE (ISO New England)");
+  console.log("Granularity: Hourly (UTC)");
   console.log("");
 
-  // Parse command-line flags
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
-  const dateArg = args.find((a) => a.startsWith("--date="))?.split("=")[1];
-  const daysArg = args.find((a) => a.startsWith("--days="))?.split("=")[1];
+  const dateArg = args.find((a) => a.startsWith("--date="))?.split("=")[1]
+    ?? args[args.indexOf("--date") + 1];
+  const daysArg = args.find((a) => a.startsWith("--days="))?.split("=")[1]
+    ?? (args.includes("--days") ? args[args.indexOf("--days") + 1] : undefined);
 
-  const days = daysArg ? parseInt(daysArg, 10) : 3;
-  const startDate = dateArg ? new Date(dateArg) : new Date();
+  const days = daysArg ? parseInt(daysArg, 10) : 7;
+  const startDate = dateArg ? new Date(dateArg + "T00:00:00Z") : new Date();
 
-  console.log(`Fetching ${days} day(s) of real ISO-NE data`);
-  console.log(`${dryRun ? "Mode: DRY-RUN (preview only)" : "Mode: LIVE (write to database)"}`);
+  console.log(`Period:      Last ${days} day(s) ending ${startDate.toISOString().slice(0, 10)}`);
+  console.log(`Mode:        ${dryRun ? "DRY-RUN (no database writes)" : "LIVE (writes to iso_load_history)"}`);
   console.log("");
 
-  // Fetch data for multiple days
-  let totalRecords = 0;
+  const provider = new EIAProvider();
   const allRecords: Array<{
     timestamp: string;
     actual_load_mw: number;
@@ -224,79 +77,92 @@ async function main() {
 
   for (let d = 0; d < days; d++) {
     const date = new Date(startDate);
-    date.setDate(date.getDate() - d);
+    date.setUTCDate(date.getUTCDate() - d);
+    const day = date.toISOString().slice(0, 10);
 
-    const dateStr = date.toISOString().split("T")[0];
-    console.log(`📅 ${dateStr}`);
+    process.stdout.write(`📅 ${day}  `);
+
     try {
-      const records = await fetchAndParseIsoNeData(date);
+      const readings = await provider.fetchDay(date);
+      const records = readings.map((r) => ({
+        timestamp: r.timestamp,
+        actual_load_mw: r.actualLoadMW,
+        forecast_load_mw: r.actualLoadMW, // EIA Form 930 does not include forecast
+      }));
       allRecords.push(...records);
-      totalRecords += records.length;
-      console.log(`   → ${records.length} records`);
+      console.log(`→ ${records.length} readings`);
     } catch (err) {
-      console.error(`   ⚠️  ${(err as Error).message}`);
-      console.error(`   (ISO-NE may not have published data for this date)`);
-      // Don't fail entirely — continue to next day
+      console.log(`→ skipped (${(err as Error).message})`);
     }
   }
 
   if (allRecords.length === 0) {
-    console.error("\n❌ FATAL: No data was retrieved from any date");
-    console.error("   ISO-NE may not have published data for these dates");
-    console.error("   or the files may not yet be available.");
+    console.error("\n❌ No data retrieved from EIA for any date.");
+    console.error("   Check that EIA_API_KEY is valid and that ISNE data is published for these dates.");
     process.exit(1);
   }
 
-  console.log(`\n✅ Total records fetched: ${totalRecords}`);
+  console.log(`\n✅ Total readings fetched: ${allRecords.length}`);
 
   if (dryRun) {
-    console.log("\n🔍 DRY-RUN MODE — Preview (first 5 records):");
+    console.log("\n🔍 DRY-RUN — first 5 records:");
     allRecords.slice(0, 5).forEach((r) => {
-      const ts = new Date(r.timestamp).toLocaleString();
-      console.log(`   ${ts} — ${r.actual_load_mw.toLocaleString()} MW`);
+      const ts = new Date(r.timestamp).toISOString();
+      console.log(`   ${ts}  ${r.actual_load_mw.toLocaleString()} MW`);
     });
-    console.log(`\nWould upsert ${totalRecords} records from official ISO-NE source`);
-    console.log("Dry run complete — no changes to database\n");
+    console.log("\nDry run complete — no database changes.\n");
     return;
   }
 
-  // Upsert into database
-  console.log("\n💾 Upserting real ISO-NE data into iso_load_history...");
-  const { error: upsertError } = await supabase
-    .from("iso_load_history")
-    .upsert(allRecords, { onConflict: "timestamp" });
+  // ── Batch upsert ──────────────────────────────────────────────────────────
 
-  if (upsertError) {
-    console.error("❌ Upsert failed:", upsertError.message);
-    process.exit(1);
+  console.log("\n💾 Upserting into iso_load_history…");
+
+  // Supabase upsert in chunks to stay within PostgREST limits
+  const CHUNK = 500;
+  let upserted = 0;
+
+  for (let i = 0; i < allRecords.length; i += CHUNK) {
+    const chunk = allRecords.slice(i, i + CHUNK);
+    const { error } = await supabase
+      .from("iso_load_history")
+      .upsert(chunk, { onConflict: "timestamp" });
+
+    if (error) {
+      console.error(`\n❌ Upsert failed at offset ${i}: ${error.message}`);
+      process.exit(1);
+    }
+    upserted += chunk.length;
+    process.stdout.write(`\r💾 Upserted ${upserted}/${allRecords.length}…`);
   }
+  console.log(`\r✅ Upserted ${upserted} records                         `);
 
-  console.log(`✅ Upserted ${allRecords.length} records`);
+  // ── Verify ────────────────────────────────────────────────────────────────
 
-  // Verify
-  const { data: samples } = await supabase
+  const { data: latest } = await supabase
     .from("iso_load_history")
     .select("timestamp, actual_load_mw")
     .order("timestamp", { ascending: false })
-    .limit(5);
+    .limit(3);
 
-  if (samples && samples.length > 0) {
-    console.log("\n📊 Latest records from ISO-NE in database:");
-    samples.forEach((s: any) => {
-      const ts = new Date(s.timestamp).toLocaleString();
-      console.log(`   ${ts} — ${s.actual_load_mw.toLocaleString()} MW`);
+  if (latest && latest.length > 0) {
+    console.log("\n📊 Latest records in database:");
+    (latest as Array<{ timestamp: string; actual_load_mw: number }>).forEach((r) => {
+      const ts = new Date(r.timestamp).toISOString();
+      console.log(`   ${ts}  ${r.actual_load_mw.toLocaleString()} MW`);
     });
   }
 
-  const { count: totalCount } = await supabase
+  const { count } = await supabase
     .from("iso_load_history")
     .select("*", { count: "exact", head: true });
 
-  console.log(`\n✅ Database contains ${totalCount} total real ISO-NE records`);
-  console.log(`   API ready: GET /api/load/iso-current\n`);
+  console.log(`\n✅ Database total: ${count} records`);
+  console.log("   Production API: GET /api/load/iso-current");
+  console.log("   Sync cron:      POST /api/sync/iso-load (every hour at :05)\n");
 }
 
 main().catch((err) => {
-  console.error("\n❌ Fatal error:", err.message);
+  console.error("\n❌ Fatal:", (err as Error).message);
   process.exit(1);
 });

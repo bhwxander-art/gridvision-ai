@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { LoadRepository } from "@/lib/db/repositories/load.repository";
+import { getActiveProviderName } from "@/lib/providers";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET(): Promise<NextResponse<IsoLoadResponse | { error: str
   if (!isDbConfigured()) {
     return NextResponse.json(
       {
-        error: "Database not configured — run: npx tsx scripts/init-isone-database.ts",
+        error: "Database not configured",
       },
       { status: 503 }
     );
@@ -29,7 +30,7 @@ export async function GET(): Promise<NextResponse<IsoLoadResponse | { error: str
     if (!current) {
       return NextResponse.json(
         {
-          error: "No ISO-NE load data available — run: npx tsx scripts/init-isone-database.ts",
+          error: "No load data available — sync has not run yet",
         },
         { status: 404 }
       );
@@ -44,7 +45,7 @@ export async function GET(): Promise<NextResponse<IsoLoadResponse | { error: str
         current_load_mw: current.currentLoadMW,
         forecast_load_mw: current.forecastLoadMW,
         timestamp: current.timestamp,
-        source: "iso-ne",
+        source: getActiveProviderName() ?? "eia",
         freshness,
       },
       {

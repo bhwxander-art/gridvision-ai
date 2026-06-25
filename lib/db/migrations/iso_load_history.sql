@@ -19,6 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_iso_load_created
 ALTER TABLE iso_load_history ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role to read/write
+DROP POLICY IF EXISTS "service_role_all" ON iso_load_history;
 CREATE POLICY "service_role_all"
   ON iso_load_history
   AS PERMISSIVE
@@ -28,6 +29,7 @@ CREATE POLICY "service_role_all"
   WITH CHECK (true);
 
 -- Allow authenticated users to read
+DROP POLICY IF EXISTS "authenticated_read" ON iso_load_history;
 CREATE POLICY "authenticated_read"
   ON iso_load_history
   AS PERMISSIVE
