@@ -90,7 +90,7 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
       ...MOCK_BASE,
       portfolio: effectivePortfolio,
       simple,
-      _provenance: makeProvenance("Supabase", now, portfolio.length > 0),
+      _provenance: makeProvenance("Supabase", now, portfolio.length === 0),
     };
 
     return NextResponse.json(body, {
