@@ -22,14 +22,19 @@ const MOCK_BASE = {
 
 export async function GET(): Promise<NextResponse<SubstationServiceData>> {
   // ── 1. Database ────────────────────────────────────────────────────────────
-  if (isDbConfigured()) {
+  const dbConfigured = isDbConfigured();
+  console.log("[/api/substations] isDbConfigured:", dbConfigured);
+
+  if (dbConfigured) {
     try {
       const ctx = await getCurrentTenant();
+      console.log("[/api/substations] getCurrentTenant:", ctx ? "ok" : "null");
       if (!ctx) {
         throw new Error("Tenant context required");
       }
       const repo = new SubstationRepository(getServerClient());
       const portfolio = await repo.findAll(ctx.tenantId);
+      console.log("[/api/substations] findAll returned:", portfolio.length, "rows");
 
       // If database returns empty portfolio, use mock data as fallback
       const effectivePortfolio = portfolio.length > 0 ? portfolio : substationPortfolio;
@@ -67,7 +72,10 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
       });
     } catch (dbErr) {
       console.error("[api/substations] DB error, falling back to mock:", dbErr);
+      console.log("[api/substations] Exception reason:", (dbErr as Error).message);
     }
+  } else {
+    console.log("[api/substations] DB not configured, using mock fallback");
   }
 
   // ── 2. Mock fallback ────────────────────────────────────────────────────────

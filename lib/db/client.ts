@@ -7,10 +7,19 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * throwing in mock/dev environments.
  */
 export function isDbConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const url = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const key = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const anonKey = Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const result = url && key;
+
+  console.log("[isDbConfigured]", {
+    NEXT_PUBLIC_SUPABASE_URL: url,
+    SUPABASE_SERVICE_ROLE_KEY: key,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
+    result,
+  });
+
+  return result;
 }
 
 /**
