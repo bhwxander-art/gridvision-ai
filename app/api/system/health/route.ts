@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { getCurrentTenant } from "@/lib/auth/tenant";
+import { hasPermission } from "@/lib/auth/rbac";
+import { handleDatabaseError } from "@/lib/utils/safe-error";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,14 @@ export interface HealthStatus {
 }
 
 export async function GET(): Promise<NextResponse<HealthStatus | { error: string }>> {
+  const ctx = await getCurrentTenant();
+
+  // Health check can be accessed by authenticated users with admin:read_health permission
+  // Super admins and utility executives get full health data
+  if (ctx && !hasPermission(ctx.role, "admin:read_health")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const startTime = Date.now();
   let dbStatus: "up" | "down" = "down";
   let dbLatency = 0;

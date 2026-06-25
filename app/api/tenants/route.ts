@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { TenantRepository } from "@/lib/db/repositories/tenant.repository";
-import { getCurrentTenant } from "@/lib/auth/tenant";
+import { getCurrentTenant, requireTenant } from "@/lib/auth/tenant";
+import { requireSuperAdmin } from "@/lib/auth/rbac";
+import { logAuditEvent } from "@/lib/db/audit";
+import { handleDatabaseError, handleValidationError } from "@/lib/utils/safe-error";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +23,12 @@ const TenantCreateSchema = z.object({
 
 export async function GET(): Promise<NextResponse> {
   const ctx = await getCurrentTenant();
+
+  // Require super admin
   if (!ctx?.isSuperAdmin) {
-    return NextResponse.json({ error: "Forbidden — Super Admin only" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
   if (!isDbConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
@@ -41,7 +47,8 @@ export async function GET(): Promise<NextResponse> {
 
     return NextResponse.json({ tenants: enriched, count: enriched.length });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    const safe = handleDatabaseError(err, "GET /api/tenants");
+    return NextResponse.json(safe, { status: 500 });
   }
 }
 
@@ -49,27 +56,52 @@ export async function GET(): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ctx = await getCurrentTenant();
+
+  // Require super admin
   if (!ctx?.isSuperAdmin) {
-    return NextResponse.json({ error: "Forbidden — Super Admin only" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
   if (!isDbConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
+  let body: unknown;
   try {
-    const body   = await req.json();
-    const parsed = TenantCreateSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
-        { status: 422 }
-      );
-    }
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
 
-    const repo   = new TenantRepository(getServerClient());
+  const parsed = TenantCreateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      handleValidationError(parsed.error.flatten().fieldErrors as Record<string, string[]>),
+      { status: 422 }
+    );
+  }
+
+  try {
+    const client = getServerClient();
+    const repo = new TenantRepository(client);
     const tenant = await repo.createTenant(parsed.data);
+
+    // Log audit event
+    await logAuditEvent(client, {
+      tenantId: ctx.tenantId, // Use current tenant ID for audit
+      userId: ctx.userId,
+      action: "tenant_create",
+      resourceType: "tenant",
+      resourceId: tenant.id,
+      changes: { name: tenant.name, slug: tenant.slug, type: tenant.type },
+    });
+
     return NextResponse.json({ tenant }, { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    const safe = handleDatabaseError(err, "POST /api/tenants");
+    return NextResponse.json(safe, { status: 500 });
   }
 }

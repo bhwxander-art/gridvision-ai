@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { getCurrentTenant, requireTenant } from "@/lib/auth/tenant";
+import { hasPermission } from "@/lib/auth/rbac";
+import { logAuditEvent } from "@/lib/db/audit";
+import { handleDatabaseError, handleValidationError } from "@/lib/utils/safe-error";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +33,10 @@ export async function GET(): Promise<NextResponse<TenantSettingsResponse | { err
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!hasPermission(ctx.role, "settings:read")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   if (!isDbConfigured()) {
     return NextResponse.json({
       tenantId: ctx.tenantId,
@@ -52,16 +59,17 @@ export async function GET(): Promise<NextResponse<TenantSettingsResponse | { err
       settings: data?.settings ?? {},
     });
   } catch (err) {
-    console.error("[api/tenants/settings GET]", err);
-    return NextResponse.json(
-      { error: String(err) },
-      { status: 500 }
-    );
+    const safe = handleDatabaseError(err, "GET /api/tenants/settings");
+    return NextResponse.json(safe, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest): Promise<NextResponse<TenantSettingsResponse | { error: string }>> {
   const ctx = await requireTenant();
+
+  if (!hasPermission(ctx.role, "settings:manage")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (!isDbConfigured()) {
     return NextResponse.json(
@@ -83,7 +91,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse<TenantSettin
   const parsed = SettingsSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
+      handleValidationError(parsed.error.flatten().fieldErrors as Record<string, string[]>),
       { status: 422 }
     );
   }
@@ -99,11 +107,12 @@ export async function PATCH(req: NextRequest): Promise<NextResponse<TenantSettin
     if (error) throw new Error(error.message);
 
     const currentSettings = data?.settings ?? {};
+    const updates = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, v]) => v !== undefined)
+    );
     const updatedSettings = {
       ...currentSettings,
-      ...Object.fromEntries(
-        Object.entries(parsed.data).filter(([, v]) => v !== undefined)
-      ),
+      ...updates,
     };
 
     const { error: updateError } = await client
@@ -113,15 +122,22 @@ export async function PATCH(req: NextRequest): Promise<NextResponse<TenantSettin
 
     if (updateError) throw new Error(updateError.message);
 
+    // Log audit event
+    await logAuditEvent(client, {
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: "settings_update",
+      resourceType: "settings",
+      resourceId: ctx.tenantId,
+      changes: updates,
+    });
+
     return NextResponse.json({
       tenantId: ctx.tenantId,
       settings: updatedSettings,
     });
   } catch (err) {
-    console.error("[api/tenants/settings PATCH]", err);
-    return NextResponse.json(
-      { error: String(err) },
-      { status: 500 }
-    );
+    const safe = handleDatabaseError(err, "PATCH /api/tenants/settings");
+    return NextResponse.json(safe, { status: 500 });
   }
 }

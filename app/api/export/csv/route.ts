@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { requireTenant } from "@/lib/auth/tenant";
+import { hasPermission } from "@/lib/auth/rbac";
 import { createExportBundle } from "@/lib/export/csv-export";
 import { logAuditEvent } from "@/lib/db/audit";
+import { handleDatabaseError, handleValidationError } from "@/lib/utils/safe-error";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +19,11 @@ const ExportRequestSchema = z.object({
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ctx = await requireTenant();
+
+  // Require export permission
+  if (!hasPermission(ctx.role, "data:export")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (!isDbConfigured()) {
     return NextResponse.json(
@@ -38,7 +45,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const parsed = ExportRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
+      handleValidationError(parsed.error.flatten().fieldErrors as Record<string, string[]>),
       { status: 422 }
     );
   }
@@ -47,6 +54,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const client = getServerClient();
 
     // Log the export action
+    const datasets = [
+      parsed.data.includeAssets && "assets",
+      parsed.data.includeProjects && "projects",
+      parsed.data.includeAccounts && "accounts",
+      parsed.data.includeScenarios && "scenarios",
+    ].filter(Boolean);
+
     await logAuditEvent(client, {
       tenantId: ctx.tenantId,
       userId: ctx.userId,
@@ -55,12 +69,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       resourceId: ctx.tenantId,
       changes: {
         format: parsed.data.format,
-        datasets: [
-          parsed.data.includeAssets && "assets",
-          parsed.data.includeProjects && "projects",
-          parsed.data.includeAccounts && "accounts",
-          parsed.data.includeScenarios && "scenarios",
-        ].filter(Boolean),
+        datasets,
       },
       ipAddress: req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined,
       userAgent: req.headers.get("user-agent") ?? undefined,
@@ -100,10 +109,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
     }
   } catch (err) {
-    console.error("[api/export/csv]", err);
-    return NextResponse.json(
-      { error: String(err) },
-      { status: 500 }
-    );
+    const safe = handleDatabaseError(err, "POST /api/export/csv");
+    return NextResponse.json(safe, { status: 500 });
   }
 }

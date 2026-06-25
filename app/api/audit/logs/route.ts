@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { getCurrentTenant } from "@/lib/auth/tenant";
+import { hasPermission } from "@/lib/auth/rbac";
 import { getAuditLog } from "@/lib/db/audit";
+import { handleDatabaseError } from "@/lib/utils/safe-error";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,11 @@ export async function GET(req: NextRequest): Promise<NextResponse<AuditLogsRespo
   const ctx = await getCurrentTenant();
   if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Require audit read permission
+  if (!hasPermission(ctx.role, "admin:read_audit")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   if (!isDbConfigured()) {
@@ -59,10 +66,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<AuditLogsRespo
       }
     );
   } catch (err) {
-    console.error("[api/audit/logs]", err);
-    return NextResponse.json(
-      { error: String(err) },
-      { status: 500 }
-    );
+    const safe = handleDatabaseError(err, "GET /api/audit/logs");
+    return NextResponse.json(safe, { status: 500 });
   }
 }
