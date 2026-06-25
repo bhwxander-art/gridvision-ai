@@ -9,6 +9,7 @@
 
 export interface DbSubstation {
   id: string;
+  tenant_id?: string;
   name: string;
   region: string;
   voltage_kv: number;
@@ -105,6 +106,7 @@ export type DbForecastRunInsert = Omit<DbForecastRun, "id" | "created_at">;
 export interface DbScenario {
   id: string;          // UUID
   user_id: string | null;
+  tenant_id: string | null;
   name: string;
   inputs: {
     dataCenterLoadMW: number;
@@ -203,6 +205,7 @@ export type DbProjectStatus =
 
 export interface DbCapitalProject {
   id: string;
+  tenant_id?: string;
   substation_id: string;
   project_name: string;
   upgrade_type: DbUpgradeType;

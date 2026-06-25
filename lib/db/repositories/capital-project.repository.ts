@@ -48,13 +48,18 @@ export class CapitalProjectRepository {
   /**
    * Returns all capital projects ordered by priority_score descending.
    * Excludes cancelled projects.
+   * Pass tenantId to scope to a specific tenant.
    */
-  async findAll(): Promise<UpgradeProject[]> {
-    const { data, error } = await this.client
+  async findAll(tenantId?: string): Promise<UpgradeProject[]> {
+    let q = this.client
       .from("capital_projects")
       .select("*")
       .neq("status", "cancelled")
       .order("priority_score", { ascending: false });
+
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+
+    const { data, error } = await q;
 
     if (error) throw new Error(`[CapitalProjectRepository.findAll] ${error.message}`);
     return (data as DbCapitalProject[]).map(toUpgradeProject);
@@ -150,13 +155,17 @@ export class CapitalProjectRepository {
   }
 
   /** Returns all projects with DB timestamps and status for the asset management UI. */
-  async listManaged(): Promise<
+  async listManaged(tenantId?: string): Promise<
     (UpgradeProject & { status: DbCapitalProject["status"]; createdAt: string; updatedAt: string })[]
   > {
-    const { data, error } = await this.client
+    let q = this.client
       .from("capital_projects")
       .select("*")
       .order("priority_score", { ascending: false });
+
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+
+    const { data, error } = await q;
 
     if (error) throw new Error(`[CapitalProjectRepository.listManaged] ${error.message}`);
     return (data as DbCapitalProject[]).map((row) => ({

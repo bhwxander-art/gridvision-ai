@@ -77,12 +77,17 @@ export class SubstationRepository {
   /**
    * Returns all substations with their transformers and feeders.
    * Ordered alphabetically by name.
+   * Pass tenantId to scope to a specific tenant.
    */
-  async findAll(): Promise<SubstationPlan[]> {
-    const { data, error } = await this.client
+  async findAll(tenantId?: string): Promise<SubstationPlan[]> {
+    let q = this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
       .order("name");
+
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+
+    const { data, error } = await q;
 
     if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
     return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
@@ -140,11 +145,15 @@ export class SubstationRepository {
   }
 
   /** Returns all substations with DB timestamps for the asset management UI. */
-  async listManaged(): Promise<(SubstationPlan & { createdAt: string; updatedAt: string })[]> {
-    const { data, error } = await this.client
+  async listManaged(tenantId?: string): Promise<(SubstationPlan & { createdAt: string; updatedAt: string })[]> {
+    let q = this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
       .order("name");
+
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+
+    const { data, error } = await q;
 
     if (error) throw new Error(`[SubstationRepository.listManaged] ${error.message}`);
     return (data as (DbSubstationWithRelations & { created_at: string; updated_at: string })[]).map(

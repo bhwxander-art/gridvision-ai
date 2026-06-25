@@ -9,7 +9,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
-  accounts,
   PIPELINE_STAGES,
   TYPE_BADGE,
   TYPE_LABEL,
@@ -22,13 +21,14 @@ import { scoreOpportunity } from "@/lib/services/account-intelligence.service";
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface AccountPipelineProps {
+  accounts:    Account[];
   selectedId:  string | null;
   onSelect:    (account: Account) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AccountPipeline({ selectedId, onSelect }: AccountPipelineProps) {
+export function AccountPipeline({ accounts, selectedId, onSelect }: AccountPipelineProps) {
   const totalAccounts  = accounts.length;
   const totalMW        = accounts.reduce((s, a) => s + a.projectedGrowthMW, 0);
   const totalRevenue   = accounts.reduce((s, a) => s + a.estimatedRevenueUSD, 0);

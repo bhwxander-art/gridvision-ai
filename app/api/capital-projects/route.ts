@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { CapitalProjectRepository } from "@/lib/db/repositories/capital-project.repository";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import {
   capitalProjects as mockProjects,
   type UpgradeProject,
@@ -20,8 +21,9 @@ export async function GET(): Promise<
   // ── 1. Try database ────────────────────────────────────────────────────────
   if (isDbConfigured()) {
     try {
+      const ctx = await getCurrentTenant();
       const repo = new CapitalProjectRepository(getServerClient());
-      const projects = await repo.findAll();
+      const projects = await repo.findAll(ctx?.tenantId);
 
       if (projects.length > 0) {
         return NextResponse.json(

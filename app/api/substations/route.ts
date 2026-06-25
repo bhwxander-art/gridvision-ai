@@ -10,6 +10,7 @@ import {
 import { substations } from "@/lib/sample-data";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { SubstationRepository } from "@/lib/db/repositories/substation.repository";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { makeProvenance, mockProvenance } from "@/lib/provenance";
 
 const MOCK_BASE = {
@@ -23,8 +24,9 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
   // ── 1. Database ────────────────────────────────────────────────────────────
   if (isDbConfigured()) {
     try {
+      const ctx = await getCurrentTenant();
       const repo = new SubstationRepository(getServerClient());
-      const portfolio = await repo.findAll();
+      const portfolio = await repo.findAll(ctx?.tenantId);
 
       const simple: Substation[] = portfolio.map((ss) => {
         const util = ss.peakLoadMW / ss.nameplateMVA;

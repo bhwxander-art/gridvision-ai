@@ -6,9 +6,11 @@ import { AccountPipeline } from "@/components/enterprise/account-pipeline";
 import { AccountDetailPanel } from "@/components/enterprise/account-detail-panel";
 import { AccountCopilot } from "@/components/enterprise/account-copilot";
 import { scoreOpportunity } from "@/lib/services/account-intelligence.service";
+import { useAccounts } from "@/lib/hooks/use-accounts";
 import type { Account } from "@/lib/data/accounts";
 
 export function AccountsSection() {
+  const { accounts } = useAccounts();
   const [selected, setSelected] = useState<Account | null>(null);
 
   return (
@@ -28,6 +30,7 @@ export function AccountsSection() {
 
       {/* Pipeline */}
       <AccountPipeline
+        accounts={accounts}
         selectedId={selected?.id ?? null}
         onSelect={setSelected}
       />

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { formatRevenue } from "@/lib/data/accounts";
 import { buildRevenueSnapshot } from "@/lib/services/revenue-forecast.service";
+import { useAccounts } from "@/lib/hooks/use-accounts";
 
 // ── Chart styling ─────────────────────────────────────────────────────────────
 
@@ -47,7 +48,8 @@ const fmtM = (v: number) => (v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function RevenueDashboard() {
-  const snap = useMemo(() => buildRevenueSnapshot(), []);
+  const { accounts } = useAccounts();
+  const snap = useMemo(() => buildRevenueSnapshot(accounts), [accounts]);
 
   const kpis = [
     {

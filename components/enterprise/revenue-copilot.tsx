@@ -15,9 +15,11 @@ import {
   buildRevenueSnapshot,
   generateRevenueQA,
 } from "@/lib/services/revenue-forecast.service";
+import { useAccounts } from "@/lib/hooks/use-accounts";
 
 export function RevenueCopilot() {
-  const snap = useMemo(() => buildRevenueSnapshot(), []);
+  const { accounts } = useAccounts();
+  const snap = useMemo(() => buildRevenueSnapshot(accounts), [accounts]);
   const qa   = useMemo(() => generateRevenueQA(snap), [snap]);
 
   const coverageColor =

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
 import { ScenarioRepository, type SavedScenario } from "@/lib/db/repositories/scenario.repository";
 import { getAuthServerClient } from "@/lib/auth/server";
+import { getCurrentTenant } from "@/lib/auth/tenant";
 import { SaveScenarioSchema, validationError } from "@/lib/validation";
 import { getRateLimitKey, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -25,8 +26,9 @@ export async function GET(): Promise<NextResponse<SavedScenario[] | { error: str
 
   try {
     const userId = await getCurrentUserId();
+    const ctx = await getCurrentTenant();
     const repo = new ScenarioRepository(getServerClient());
-    const scenarios = await repo.findAll(userId);
+    const scenarios = await repo.findAll(userId, ctx?.tenantId);
     return NextResponse.json(scenarios);
   } catch (err) {
     console.error("[api/scenarios GET]", err);
@@ -56,6 +58,7 @@ export async function POST(
   const { name, inputs } = parsed.data;
 
   const userId = await getCurrentUserId();
+  const ctx = await getCurrentTenant();
   if (!checkRateLimit(getRateLimitKey(userId, req))) {
     return rateLimitResponse();
   }
@@ -64,6 +67,7 @@ export async function POST(
     const repo = new ScenarioRepository(getServerClient());
     const saved = await repo.save({
       user_id: userId,
+      tenant_id: ctx?.tenantId ?? null,
       name,
       inputs,
     });

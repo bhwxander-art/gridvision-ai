@@ -21,13 +21,14 @@ function toSavedScenario(row: DbScenario): SavedScenario {
 export class ScenarioRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  async findAll(userId: string | null): Promise<SavedScenario[]> {
+  async findAll(userId?: string | null, tenantId?: string): Promise<SavedScenario[]> {
     let query = this.client
       .from("scenarios")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (userId) query = query.eq("user_id", userId);
+    if (tenantId) query = query.eq("tenant_id", tenantId);
 
     const { data, error } = await query;
     if (error) throw new Error(`[ScenarioRepository.findAll] ${error.message}`);
