@@ -32,6 +32,30 @@ export async function GET(): Promise<NextResponse<SubstationServiceData>> {
       if (!ctx) {
         throw new Error("Tenant context required");
       }
+
+      // ── TEMPORARY DIAGNOSTIC: Test each query progressively ──
+      const client = getServerClient();
+
+      // Query A: Simple select
+      console.log("[DIAG] Query A: .select('*')");
+      const resA = await client.from("substations").select("*");
+      console.log("[DIAG-A] rows:", resA.data?.length ?? 0, "error:", resA.error?.message ?? "none", "ids:", resA.data?.map((r: any) => r.id).join(",") ?? "");
+
+      // Query B: With transformers
+      console.log("[DIAG] Query B: .select('*, transformers(*)')");
+      const resB = await client.from("substations").select("*, transformers(*)");
+      console.log("[DIAG-B] rows:", resB.data?.length ?? 0, "error:", resB.error?.message ?? "none", "ids:", resB.data?.map((r: any) => r.id).join(",") ?? "");
+
+      // Query C: With feeders
+      console.log("[DIAG] Query C: .select('*, feeders(*)')");
+      const resC = await client.from("substations").select("*, feeders(*)");
+      console.log("[DIAG-C] rows:", resC.data?.length ?? 0, "error:", resC.error?.message ?? "none", "ids:", resC.data?.map((r: any) => r.id).join(",") ?? "");
+
+      // Query D: With both
+      console.log("[DIAG] Query D: .select('*, transformers(*), feeders(*)')");
+      const resD = await client.from("substations").select("*, transformers(*), feeders(*)");
+      console.log("[DIAG-D] rows:", resD.data?.length ?? 0, "error:", resD.error?.message ?? "none", "ids:", resD.data?.map((r: any) => r.id).join(",") ?? "");
+
       const repo = new SubstationRepository(getServerClient());
       const portfolio = await repo.findAll(ctx.tenantId);
       console.log("[/api/substations] findAll returned:", portfolio.length, "rows");
