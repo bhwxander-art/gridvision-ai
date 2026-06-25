@@ -1,0 +1,82 @@
+import { NextResponse } from "next/server";
+import { isDbConfigured, getServerClient } from "@/lib/db/client";
+
+export const dynamic = "force-dynamic";
+
+export interface HealthStatus {
+  status: "healthy" | "degraded" | "down";
+  database: "up" | "down";
+  tenantCount: number;
+  userCount: number;
+  uptime: number;
+  buildVersion: string;
+  timestamp: string;
+  checks: {
+    database: {
+      status: "up" | "down";
+      latency: number;
+    };
+  };
+}
+
+export async function GET(): Promise<NextResponse<HealthStatus | { error: string }>> {
+  const startTime = Date.now();
+  let dbStatus: "up" | "down" = "down";
+  let dbLatency = 0;
+  let tenantCount = 0;
+  let userCount = 0;
+
+  if (isDbConfigured()) {
+    try {
+      const client = getServerClient();
+      const dbStart = Date.now();
+
+      // Test database connection with a simple query
+      const { error: tenantError, count: tCount } = await client
+        .from("tenants")
+        .select("*", { count: "exact", head: true });
+
+      const { error: userError, count: uCount } = await client
+        .from("users")
+        .select("*", { count: "exact", head: true });
+
+      dbLatency = Date.now() - dbStart;
+
+      if (!tenantError && !userError) {
+        dbStatus = "up";
+        tenantCount = tCount ?? 0;
+        userCount = uCount ?? 0;
+      }
+    } catch (err) {
+      console.error("[health] Database check failed:", err);
+      dbStatus = "down";
+    }
+  }
+
+  const uptime = Math.floor(process.uptime());
+  const buildVersion = process.env.NEXT_PUBLIC_BUILD_VERSION ?? "unknown";
+  const overallStatus = dbStatus === "up" ? "healthy" : "degraded";
+
+  return NextResponse.json(
+    {
+      status: overallStatus,
+      database: dbStatus,
+      tenantCount,
+      userCount,
+      uptime,
+      buildVersion,
+      timestamp: new Date().toISOString(),
+      checks: {
+        database: {
+          status: dbStatus,
+          latency: dbLatency,
+        },
+      },
+    },
+    {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+      },
+    }
+  );
+}
