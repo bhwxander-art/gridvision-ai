@@ -163,8 +163,18 @@ export default function DashboardPage() {
   const systemStatus = getSystemStatus(loadError, dataAgeMinutes);
   const ss = STATUS_STYLES[systemStatus];
 
-  const high24h = readings.length > 0 ? Math.max(...readings.map((r) => r.currentLoadMW)) : null;
-  const low24h  = readings.length > 0 ? Math.min(...readings.map((r) => r.currentLoadMW)) : null;
+  const { high24h, low24h, chartData } = useMemo(() => {
+    if (readings.length === 0) return { high24h: null, low24h: null, chartData: [] };
+    let high = readings[0].currentLoadMW;
+    let low = readings[0].currentLoadMW;
+    const data: { time: string; mw: number }[] = [];
+    for (const r of readings) {
+      if (r.currentLoadMW > high) high = r.currentLoadMW;
+      if (r.currentLoadMW < low) low = r.currentLoadMW;
+      data.push({ time: new Date(r.timestamp).toISOString().slice(11, 16), mw: r.currentLoadMW });
+    }
+    return { high24h: high, low24h: low, chartData: data };
+  }, [readings]);
 
   const alerts = useMemo(() => {
     const current = liveLoad
@@ -174,11 +184,6 @@ export default function DashboardPage() {
   }, [liveLoad, readings]);
 
   const topAlert = alerts[0] ?? null;
-
-  const chartData = readings.map((r) => ({
-    time: new Date(r.timestamp).toISOString().slice(11, 16), // "HH:MM" UTC
-    mw: r.currentLoadMW,
-  }));
 
   // ── Forecast state (unchanged) ─────────────────────────────────────────
   const [cityName, setCityName] = useState(defaultForecastInputs.cityName);
