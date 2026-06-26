@@ -464,8 +464,12 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex h-[120px] items-center justify-center text-sm text-muted-foreground">
-                Health score unavailable — awaiting data sync
+              <div className="flex h-[120px] flex-col items-center justify-center gap-2">
+                <Gauge className="h-7 w-7 text-muted-foreground/25" aria-hidden="true" />
+                <p className="text-sm font-medium text-muted-foreground">No data to score</p>
+                <p className="text-xs text-muted-foreground/60">
+                  Score requires at least 2 hours of historical readings
+                </p>
               </div>
             )}
           </CardContent>
@@ -570,8 +574,14 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-                No historical data available
+              <div className="flex h-[220px] flex-col items-center justify-center gap-3">
+                <Activity className="h-8 w-8 text-muted-foreground/25" aria-hidden="true" />
+                <div className="space-y-1 text-center">
+                  <p className="text-sm font-medium text-muted-foreground">No historical data</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    Load history will appear after the first data sync completes
+                  </p>
+                </div>
               </div>
             )}
           </CardContent>
