@@ -8,6 +8,7 @@ import {
   Gauge,
   Info,
   MapPin,
+  WifiOff,
   Zap,
 } from "lucide-react";
 import {
@@ -92,6 +93,31 @@ function AlertCard({ alert }: { alert: GridAlert }) {
   );
 }
 
+// ── Error banner ──────────────────────────────────────────────────────────
+
+function DataErrorBanner({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="mb-6 flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/5 px-4 py-3"
+    >
+      <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-red-400">{title}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{message}</p>
+      </div>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onRetry}
+        className="h-7 shrink-0 px-2 text-xs"
+      >
+        Retry
+      </Button>
+    </div>
+  );
+}
+
 // ── System status ──────────────────────────────────────────────────────────
 
 function getSystemStatus(
@@ -126,9 +152,9 @@ const CHART_SKELETON_BARS = [45, 60, 50, 75, 85, 65, 55, 70, 80, 60, 45, 65];
 
 export default function DashboardPage() {
   // ── Grid Monitor data ──────────────────────────────────────────────────
-  const { data: liveLoad, loading: loadLoading, error: loadError } = useIsoLoad(60_000);
-  const { readings, loading: histLoading } = useIsoHistory(24, 300_000);
-  const { result: health, loading: healthLoading } = useGridHealth(120_000);
+  const { data: liveLoad, loading: loadLoading, error: loadError, refetch: loadRefetch } = useIsoLoad(60_000);
+  const { readings, loading: histLoading, error: histError, refetch: histRefetch } = useIsoHistory(24, 300_000);
+  const { result: health, loading: healthLoading, error: healthError, refetch: healthRefetch } = useGridHealth(120_000);
 
   const dataAgeMinutes = liveLoad
     ? (Date.now() - new Date(liveLoad.timestamp).getTime()) / 60_000
@@ -228,6 +254,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Error banner — live load only; history/health errors shown inline */}
+        {!loadLoading && loadError && !liveLoad && (
+          <DataErrorBanner
+            title="Live data feed unavailable"
+            message={loadError.message}
+            onRetry={loadRefetch}
+          />
+        )}
+
         {/* KPI strip */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
           {/* Current Load */}
@@ -296,6 +331,11 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2 mt-1">
                 {loadLoading && readings.length === 0 ? (
                   <span className="inline-block h-6 w-28 animate-pulse rounded-md bg-secondary" aria-hidden="true" />
+                ) : loadError && !liveLoad ? (
+                  <>
+                    <WifiOff className="h-5 w-5 text-muted-foreground" />
+                    <span className="font-semibold text-muted-foreground">Unknown</span>
+                  </>
                 ) : topAlert === null ? (
                   <>
                     <CheckCircle2 className="h-5 w-5 text-green-400" />
@@ -343,7 +383,16 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {healthLoading && !health ? (
+            {healthError && !healthLoading && !health ? (
+              <div className="flex h-[120px] flex-col items-center justify-center gap-2 text-sm" role="alert">
+                <WifiOff className="h-7 w-7 text-muted-foreground/40" aria-hidden="true" />
+                <p className="font-medium text-muted-foreground">Health score unavailable</p>
+                <p className="max-w-xs text-center text-xs text-muted-foreground/70">{healthError.message}</p>
+                <Button size="sm" variant="outline" onClick={healthRefetch} className="mt-1 h-7 text-xs">
+                  Retry
+                </Button>
+              </div>
+            ) : healthLoading && !health ? (
               <div className="space-y-4" role="status" aria-label="Computing grid health score">
                 <div className="grid grid-cols-[auto_1fr] gap-6 items-start">
                   <Skeleton className="h-14 w-16 rounded-lg" />
@@ -436,7 +485,16 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {histLoading && chartData.length === 0 ? (
+            {histError && !histLoading && chartData.length === 0 ? (
+              <div className="flex h-[220px] flex-col items-center justify-center gap-2 text-sm" role="alert">
+                <WifiOff className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                <p className="font-medium text-muted-foreground">Load history unavailable</p>
+                <p className="max-w-xs text-center text-xs text-muted-foreground/70">{histError.message}</p>
+                <Button size="sm" variant="outline" onClick={histRefetch} className="mt-1 h-7 text-xs">
+                  Retry
+                </Button>
+              </div>
+            ) : histLoading && chartData.length === 0 ? (
               <div
                 className="flex h-[220px] w-full items-end gap-1.5 px-2"
                 role="status"
