@@ -58,6 +58,9 @@ export function Navbar() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/about">Contact</Link>
           </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/settings">Settings</Link>
+          </Button>
           <Button size="sm" asChild>
             <Link href="/enterprise">Launch Platform</Link>
           </Button>

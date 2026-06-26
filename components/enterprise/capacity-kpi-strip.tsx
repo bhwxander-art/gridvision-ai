@@ -1,7 +1,9 @@
 "use client";
 
-import { Activity, Battery, Gauge, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { Activity, Battery, Download, Gauge, ShieldAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { CapacitySnapshot, RiskLevel } from "@/lib/services/capacity.service";
 
 const riskConfig: Record<
@@ -20,6 +22,7 @@ interface CapacityKpiStripProps {
 
 export function CapacityKpiStrip({ snapshot }: CapacityKpiStripProps) {
   const risk = riskConfig[snapshot.riskLevel];
+  const [downloading, setDownloading] = useState(false);
 
   const kpis = [
     {
@@ -62,6 +65,38 @@ export function CapacityKpiStrip({ snapshot }: CapacityKpiStripProps) {
     },
   ];
 
+  async function downloadPdf() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/reports/capacity-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantName: "GridVision AI",
+          currentLoadMW: snapshot.currentLoadMW,
+          capacityMW: snapshot.capacityMW,
+          utilizationPct: snapshot.utilizationPct,
+          headroomMW: snapshot.headroomMW,
+          riskLevel: snapshot.riskLevel,
+          substations: [],
+          generatedAt: new Date().toLocaleString(),
+        }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `capacity-report-${new Date().toISOString().split("T")[0]}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently ignore download errors
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {kpis.map((kpi) => (
@@ -103,6 +138,16 @@ export function CapacityKpiStrip({ snapshot }: CapacityKpiStripProps) {
           <span className="text-xs text-muted-foreground">
             {snapshot.utilizationPct}% utilized
           </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={downloadPdf}
+            disabled={downloading}
+            className="ml-2 gap-1.5 text-xs"
+          >
+            <Download className="h-3 w-3" />
+            {downloading ? "Generating..." : "Download PDF"}
+          </Button>
         </CardContent>
       </Card>
     </div>

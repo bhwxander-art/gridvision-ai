@@ -1,3 +1,4 @@
+// DEV-ONLY: This file provides mock data for local development. In production, all data comes from the database.
 import type {
   DataCenterInterconnection,
   SubstationPlan,

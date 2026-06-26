@@ -1,4 +1,5 @@
 import "server-only";
+import Stripe from "stripe";
 import crypto from "crypto";
 
 /**
@@ -10,44 +11,21 @@ const stripeKey = process.env.STRIPE_SECRET_KEY || "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
-if (!stripeKey && process.env.NODE_ENV === "production") {
-  throw new Error("STRIPE_SECRET_KEY is required in production");
+// Lazy Stripe client — only instantiated when actually used.
+// Not created at module load time to avoid throwing during Next.js build.
+let _stripe: Stripe | null = null;
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    if (!stripeKey) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("STRIPE_SECRET_KEY is required in production");
+      }
+      throw new Error("STRIPE_SECRET_KEY is not configured");
+    }
+    _stripe = new Stripe(stripeKey, { apiVersion: "2026-06-24.dahlia" });
+  }
+  return _stripe;
 }
-
-// Stripe client - import real SDK when available
-// Stub for now but structured for real SDK replacement
-export const stripe = {
-  checkout: {
-    sessions: {
-      create: async (params: any) => ({
-        id: `cs_${Date.now()}`,
-        url: `/billing/checkout?session=${Date.now()}`,
-        ...params,
-      }),
-    },
-  },
-  customers: {
-    create: async (params: any) => ({
-      id: `cus_${Date.now()}`,
-      ...params,
-    }),
-  },
-  subscriptions: {
-    retrieve: async (id: string) => ({
-      id,
-      status: "active",
-      items: { data: [{ id: `si_${Date.now()}` }] },
-    }),
-    update: async (id: string, params: any) => ({
-      id,
-      ...params,
-    }),
-    del: async (id: string) => ({
-      id,
-      deleted: true,
-    }),
-  },
-} as any;
 
 export const STRIPE_CONFIG = {
   publishableKey,
@@ -60,7 +38,7 @@ export const STRIPE_CONFIG = {
 export function verifyWebhookSignature(body: string | Buffer, signature: string): {
   id: string;
   type: string;
-  data: any;
+  data: { object: Record<string, unknown> };
   created: number;
 } {
   if (!webhookSecret) {
@@ -105,7 +83,7 @@ export function verifyWebhookSignature(body: string | Buffer, signature: string)
   }
 
   try {
-    return JSON.parse(bodyString);
+    return JSON.parse(bodyString) as { id: string; type: string; data: { object: Record<string, unknown> }; created: number };
   } catch {
     throw new Error("Invalid JSON in webhook body");
   }
@@ -166,10 +144,10 @@ export async function createCheckoutSession(
   plan: "starter" | "professional" | "enterprise",
   cycle: "monthly" | "annual",
   returnUrl: string
-): Promise<any> {
+): Promise<Stripe.Checkout.Session> {
   const priceId = getStripePriceId(plan, cycle);
 
-  return stripe.checkout.sessions.create({
+  return getStripe().checkout.sessions.create({
     customer: customerId,
     payment_method_types: ["card"],
     line_items: [
@@ -194,8 +172,8 @@ export async function createStripeCustomer(
   tenantId: string,
   email: string,
   companyName: string
-): Promise<any> {
-  return stripe.customers.create({
+): Promise<Stripe.Customer> {
+  return getStripe().customers.create({
     email,
     name: companyName,
     metadata: {
@@ -204,18 +182,18 @@ export async function createStripeCustomer(
   });
 }
 
-export async function getStripeSubscription(subscriptionId: string): Promise<any> {
-  return stripe.subscriptions.retrieve(subscriptionId);
+export async function getStripeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+  return getStripe().subscriptions.retrieve(subscriptionId);
 }
 
 export async function updateStripeSubscription(
   subscriptionId: string,
   newPriceId: string
-): Promise<any> {
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+): Promise<Stripe.Subscription> {
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
   const items = subscription.items.data;
 
-  return stripe.subscriptions.update(subscriptionId, {
+  return getStripe().subscriptions.update(subscriptionId, {
     items: [
       {
         id: items[0].id,
@@ -229,12 +207,12 @@ export async function updateStripeSubscription(
 export async function cancelStripeSubscription(
   subscriptionId: string,
   atPeriodEnd = true
-): Promise<any> {
+): Promise<Stripe.Subscription> {
   if (atPeriodEnd) {
-    return stripe.subscriptions.update(subscriptionId, {
+    return getStripe().subscriptions.update(subscriptionId, {
       cancel_at_period_end: true,
     });
   } else {
-    return stripe.subscriptions.del(subscriptionId);
+    return getStripe().subscriptions.cancel(subscriptionId);
   }
 }

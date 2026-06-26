@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Download,
   Gauge,
   Info,
   MapPin,
@@ -184,6 +185,46 @@ export default function DashboardPage() {
   }, [liveLoad, readings]);
 
   const topAlert = alerts[0] ?? null;
+
+  // ── PDF download ───────────────────────────────────────────────────────────
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const downloadGridHealthPdf = useCallback(async () => {
+    if (!health) return;
+    setDownloadingPdf(true);
+    try {
+      const payload = {
+        tenantName: "GridVision AI",
+        score: health.score,
+        status: health.status,
+        factors: health.factors,
+        recommendation: health.recommendation,
+        alerts: alerts.map((a) => ({
+          title: a.title,
+          severity: a.severity,
+          message: a.message,
+        })),
+        generatedAt: new Date().toISOString(),
+      };
+      const res = await fetch("/api/reports/grid-health-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`PDF generation failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `grid-health-report-${new Date().toISOString().split("T")[0]}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[dashboard] PDF download error:", err);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [health, alerts]);
 
   // ── Forecast state (unchanged) ─────────────────────────────────────────
   const [cityName, setCityName] = useState(defaultForecastInputs.cityName);
@@ -379,12 +420,27 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold">Grid Health Score</CardTitle>
-              {health && (
-                <Badge variant={HEALTH_STATUS_CONFIG[health.status].badgeVariant}>
-                  {HEALTH_STATUS_CONFIG[health.status].emoji}&nbsp;
-                  {HEALTH_STATUS_CONFIG[health.status].label}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {health && (
+                  <Badge variant={HEALTH_STATUS_CONFIG[health.status].badgeVariant}>
+                    {HEALTH_STATUS_CONFIG[health.status].emoji}&nbsp;
+                    {HEALTH_STATUS_CONFIG[health.status].label}
+                  </Badge>
+                )}
+                {health && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={downloadGridHealthPdf}
+                    disabled={downloadingPdf}
+                    aria-label="Download Grid Health PDF report"
+                  >
+                    <Download className="h-3 w-3" aria-hidden="true" />
+                    {downloadingPdf ? "Generating…" : "PDF"}
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>

@@ -184,58 +184,14 @@ export async function recordUsageEvent(
   count = 1
 ): Promise<void> {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-
-  // Get or create usage record for current month
-  const { data: existing, error: fetchError } = await client
-    .from("usage_records")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("year", year)
-    .eq("month", month)
-    .maybeSingle();
-
-  if (fetchError && fetchError.code !== "PGRST116") {
-    throw new Error(`Failed to fetch usage: ${fetchError.message}`);
-  }
-
-  if (!existing) {
-    // Create new usage record
-    const { error: createError } = await client.from("usage_records").insert({
-      tenant_id: tenantId,
-      year,
-      month,
-      api_requests: eventType === "api_request" ? count : 0,
-      scenario_runs: eventType === "scenario_run" ? count : 0,
-      asset_records: eventType === "asset_record" ? count : 0,
-      user_seats_used: eventType === "user_seat" ? count : 0,
-      storage_gb: 0,
-      overage_charges_cents: 0,
-    });
-
-    if (createError) {
-      throw new Error(`Failed to create usage record: ${createError.message}`);
-    }
-  } else {
-    // Increment usage
-    const updates: Record<string, number> = {};
-    if (eventType === "api_request") updates.api_requests = count;
-    if (eventType === "scenario_run") updates.scenario_runs = count;
-    if (eventType === "asset_record") updates.asset_records = count;
-    if (eventType === "user_seat") updates.user_seats_used = count;
-
-    const { error: updateError } = await client
-      .from("usage_records")
-      .update(updates)
-      .eq("tenant_id", tenantId)
-      .eq("year", year)
-      .eq("month", month);
-
-    if (updateError) {
-      throw new Error(`Failed to update usage: ${updateError.message}`);
-    }
-  }
+  const { error } = await client.rpc("increment_usage_counter", {
+    p_tenant_id: tenantId,
+    p_year: now.getFullYear(),
+    p_month: now.getMonth() + 1,
+    p_event_type: eventType,
+    p_count: count,
+  });
+  if (error) throw new Error(`Failed to record usage: ${error.message}`);
 }
 
 export async function getMonthlyUsage(

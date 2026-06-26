@@ -8,6 +8,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type StripeEventObject = Record<string, unknown>;
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!isDbConfigured()) {
     return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
@@ -39,8 +41,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     markWebhookProcessed(event.id);
 
     // Handle webhook events
-    const subscription = event.data?.object;
-    const tenantId = subscription?.metadata?.tenantId;
+    const subscription = event.data?.object as StripeEventObject | undefined;
+    const tenantId = (subscription?.metadata as StripeEventObject | undefined)?.tenantId;
 
     switch (event.type) {
       case "customer.subscription.created":
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object;
+        const invoice = event.data.object as StripeEventObject;
         if (invoice?.subscription) {
           console.error(`[Stripe] Payment failed for subscription: ${invoice.subscription}`);
         }
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       case "invoice.paid": {
-        const invoice = event.data.object;
+        const invoice = event.data.object as StripeEventObject;
         if (invoice?.subscription) {
           console.log(`[Stripe] Payment succeeded for subscription: ${invoice.subscription}`, {
             amount: invoice.amount_paid,
