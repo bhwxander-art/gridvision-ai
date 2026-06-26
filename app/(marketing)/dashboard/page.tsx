@@ -76,8 +76,8 @@ function AlertCard({ alert }: { alert: GridAlert }) {
   const s = SEVERITY_STYLES[alert.severity];
   const Icon = alert.severity === "info" ? Info : AlertTriangle;
   return (
-    <div className={cn("flex items-start gap-3 rounded-lg border p-4", s.border)}>
-      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", s.icon)} />
+    <div role="listitem" className={cn("flex items-start gap-3 rounded-lg border p-4", s.border)}>
+      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", s.icon)} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-sm font-semibold">{alert.title}</span>
@@ -205,11 +205,11 @@ export default function DashboardPage() {
       {/* ════════════════════════════════════════════════════════════════════
           SECTION 1 — GRID MONITOR
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="space-y-6">
+      <section className="space-y-6" aria-labelledby="grid-monitor-heading">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Grid Monitor</h1>
+            <h1 id="grid-monitor-heading" className="text-3xl font-bold tracking-tight">Grid Monitor</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               ISO New England · Real-Time System Load
             </p>
@@ -217,7 +217,7 @@ export default function DashboardPage() {
 
           <div className="text-right text-xs text-muted-foreground space-y-1 sm:shrink-0">
             <div className="flex items-center justify-end gap-1.5">
-              <span className={cn("inline-block h-2 w-2 rounded-full", ss.dot)} />
+              <span className={cn("inline-block h-2 w-2 rounded-full", ss.dot)} aria-hidden="true" />
               <span className={cn("font-semibold uppercase tracking-wide text-foreground text-sm", ss.text)}>
                 {ss.label}
               </span>
@@ -416,6 +416,7 @@ export default function DashboardPage() {
                         "font-mono text-5xl font-bold leading-none",
                         HEALTH_STATUS_CONFIG[health.status].scoreClass
                       )}
+                      aria-label={`Grid health score: ${health.score} out of 100`}
                     >
                       {health.score}
                     </span>
@@ -434,7 +435,14 @@ export default function DashboardPage() {
                             </span>
                           </div>
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          role="progressbar"
+                          aria-valuenow={f.score}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${f.label}: ${f.score} / 100`}
+                          className="h-1.5 w-full overflow-hidden rounded-full bg-secondary"
+                        >
                           <div
                             className={cn(
                               "h-full rounded-full transition-all duration-500",
@@ -514,7 +522,7 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : chartData.length > 0 ? (
-              <div className="h-[220px] w-full">
+              <div className="h-[220px] w-full" aria-label="24-hour system load trend — ISO New England">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
                     data={chartData}
@@ -606,7 +614,7 @@ export default function DashboardPage() {
               </span>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div role="list" aria-label="Active grid alerts" className="space-y-3">
               {alerts.map((alert) => (
                 <AlertCard key={alert.code} alert={alert} />
               ))}
@@ -621,9 +629,9 @@ export default function DashboardPage() {
       {/* ════════════════════════════════════════════════════════════════════
           SECTION 2 — FORECAST DASHBOARD (unchanged)
           ════════════════════════════════════════════════════════════════════ */}
-      <section>
+      <section aria-labelledby="forecast-heading">
         <div className="mb-10">
-          <h2 className="text-3xl font-bold tracking-tight">
+          <h2 id="forecast-heading" className="text-3xl font-bold tracking-tight">
             Forecast Dashboard
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">

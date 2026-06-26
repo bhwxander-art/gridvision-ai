@@ -64,9 +64,9 @@ function DefaultFallback({
   reset: () => void;
 }) {
   return (
-    <div className="flex min-h-[240px] items-center justify-center p-8">
+    <div role="alert" className="flex min-h-[240px] items-center justify-center p-8">
       <div className="max-w-sm text-center">
-        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10">
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10" aria-hidden="true">
           <span className="font-mono text-sm text-red-400">!</span>
         </div>
         <p className="font-mono text-sm font-semibold text-red-400">
