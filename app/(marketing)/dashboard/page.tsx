@@ -215,7 +215,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="shrink-0 text-right text-xs text-muted-foreground space-y-1">
+          <div className="text-right text-xs text-muted-foreground space-y-1 sm:shrink-0">
             <div className="flex items-center justify-end gap-1.5">
               <span className={cn("inline-block h-2 w-2 rounded-full", ss.dot)} />
               <span className={cn("font-semibold uppercase tracking-wide text-foreground text-sm", ss.text)}>
@@ -394,8 +394,8 @@ export default function DashboardPage() {
               </div>
             ) : healthLoading && !health ? (
               <div className="space-y-4" role="status" aria-label="Computing grid health score">
-                <div className="grid grid-cols-[auto_1fr] gap-6 items-start">
-                  <Skeleton className="h-14 w-16 rounded-lg" />
+                <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[auto_1fr] sm:items-start sm:gap-6">
+                  <Skeleton className="h-14 w-full rounded-lg sm:w-16" />
                   <div className="space-y-3 pt-1">
                     <Skeleton className="h-4 w-full" />
                     <Skeleton className="h-4 w-5/6" />
@@ -408,9 +408,9 @@ export default function DashboardPage() {
             ) : health ? (
               <div className="space-y-4">
                 {/* Score + factors row */}
-                <div className="grid grid-cols-[auto_1fr] gap-6 items-start">
+                <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[auto_1fr] sm:items-start sm:gap-6">
                   {/* Score dial */}
-                  <div className="flex flex-col items-center justify-center min-w-[80px]">
+                  <div className="flex flex-row items-center gap-3 sm:flex-col sm:justify-center sm:min-w-[80px]">
                     <span
                       className={cn(
                         "font-mono text-5xl font-bold leading-none",
@@ -419,7 +419,7 @@ export default function DashboardPage() {
                     >
                       {health.score}
                     </span>
-                    <span className="mt-1 text-xs text-muted-foreground">/ 100</span>
+                    <span className="text-xs text-muted-foreground sm:mt-1">/ 100</span>
                   </div>
 
                   {/* Factor bars */}
