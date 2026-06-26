@@ -9,9 +9,6 @@ import type {
 import type { SubstationPlan, FeederCircuit } from "@/lib/types";
 import type { TransformerAsset } from "@/lib/planning-engine";
 
-// TEMPORARY: Store last diagnostic info for API to read
-export let lastFindAllDiag: any = null;
-
 function toTransformer(row: DbTransformer): TransformerAsset {
   return {
     id: row.id,
@@ -75,6 +72,7 @@ export class SubstationRepository {
     const { data, error } = await this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
+      .eq("tenant_id", tenantId)
       .order("name");
 
     if (error) throw new Error(`[SubstationRepository.listManaged] ${error.message}`);
@@ -92,6 +90,7 @@ export class SubstationRepository {
       .from("substations")
       .select("*, transformers(*), feeders(*)")
       .eq("id", id)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw new Error(`[SubstationRepository.findById] ${error.message}`);
@@ -103,35 +102,22 @@ export class SubstationRepository {
     const { data, error } = await this.client
       .from("substations")
       .select("*, transformers(*), feeders(*)")
+      .eq("tenant_id", tenantId)
       .order("name");
 
     if (error) throw new Error(`[SubstationRepository.findAll] ${error.message}`);
+    return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
+  }
 
-    console.log("RAW DATA COUNT", data?.length);
-    console.log("FIRST RAW RECORD", data?.[0]);
+  async getPortfolio(tenantId: string): Promise<SubstationPlan[]> {
+    const { data, error } = await this.client
+      .from("substations")
+      .select("*, transformers(*), feeders(*)")
+      .eq("tenant_id", tenantId)
+      .order("name");
 
-    lastFindAllDiag = {
-      rawDataCount: data?.length ?? 0,
-      firstRawRecord: data?.[0] ?? null,
-    };
-
-    let mapped: SubstationPlan[];
-    try {
-      mapped = (data as DbSubstationWithRelations[]).map(toSubstationPlan);
-      console.log("MAPPED COUNT", mapped.length);
-      console.log("FIRST MAPPED", mapped[0]);
-      lastFindAllDiag.mappedCount = mapped.length;
-      lastFindAllDiag.firstMapped = mapped[0] ?? null;
-      lastFindAllDiag.mappingError = null;
-    } catch (e) {
-      console.error("MAPPING ERROR", e);
-      lastFindAllDiag.mappingError = String(e);
-      lastFindAllDiag.mappedCount = 0;
-      throw e;
-    }
-
-    console.log("[findAll] returning", mapped.length, "substations");
-    return mapped;
+    if (error) throw new Error(`[SubstationRepository.getPortfolio] ${error.message}`);
+    return (data as DbSubstationWithRelations[]).map(toSubstationPlan);
   }
 
   async upsert(ss: SubstationPlan, tenantId: string): Promise<void> {

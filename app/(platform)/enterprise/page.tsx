@@ -26,6 +26,7 @@ import { useSubstationData } from "@/lib/hooks/use-substation-data";
 import { useDataCenterQueue } from "@/lib/hooks/use-datacenter-queue";
 import { useForecast } from "@/lib/hooks/use-forecast";
 import { ForecastPanel } from "@/components/enterprise/forecast-panel";
+import { ForecastAccuracyPanel } from "@/components/enterprise/forecast-accuracy-panel";
 import { CopilotPanel } from "@/components/enterprise/copilot-panel";
 import { useLoadCurrent } from "@/lib/hooks/use-load-current";
 import { useLoadHistory } from "@/lib/hooks/use-load-history";
@@ -292,7 +293,10 @@ export default function EnterprisePlanningPage() {
             ) : forecastError || !forecast ? (
               <ErrorBanner message="Unable to load forecast data." />
             ) : (
-              <ForecastPanel data={forecast} />
+              <div className="space-y-6">
+                <ForecastPanel data={forecast} />
+                <ForecastAccuracyPanel />
+              </div>
             )
           )}
 

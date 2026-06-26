@@ -28,7 +28,7 @@ export interface SubstationServiceData {
 /** Which data source successfully provided the data. */
 export type DataSourceTag = "db" | "api" | "mock";
 
-// ── Fallback (mock) value ──────────────────────────────────────────────────
+// ── Fallback (mock) value — used only in development ──────────────────────
 
 function buildMockData(): SubstationServiceData {
   return {
@@ -40,23 +40,12 @@ function buildMockData(): SubstationServiceData {
   };
 }
 
-// ── Source priority: DB → API → Mock ──────────────────────────────────────
-//
-// Server-side (typeof window === "undefined"):
-//   1. Query Supabase directly via SubstationRepository (fastest, no HTTP round-trip)
-//   2. Fall back to API route (handles its own DB/mock logic)
-//   3. Fall back to in-memory mock
-//
-// Client-side:
-//   1. Call the /api/substations route (which internally tries DB → mock)
-//   2. Fall back to in-memory mock
-
 // ── Service function ────────────────────────────────────────────────────────
 
 /**
  * Fetches the full substation dataset from the highest-priority available source:
  *   1. GET /api/substations  (HTTP fetch; API route handles DB → mock internally)
- *   2. In-memory mock data  (always available as last resort)
+ *   2. In-memory mock data   (development fallback only — not used in production)
  *
  * The return type is identical regardless of source — callers are source-agnostic.
  */
@@ -65,15 +54,40 @@ export async function fetchSubstationData(opts?: {
 }): Promise<SubstationServiceData> {
   // ── 1. API route ──────────────────────────────────────────────────────────
   try {
-    return await fetchWithRetry<SubstationServiceData>("/api/substations", {
+    const data = await fetchWithRetry<SubstationServiceData>("/api/substations", {
       signal: opts?.signal,
     });
+
+    // Warn in production when API returns mock data (no real DB data configured)
+    if (
+      data._provenance?.freshness === "mock" &&
+      typeof process !== "undefined" &&
+      process.env.NODE_ENV !== "development" &&
+      process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "true"
+    ) {
+      console.warn(
+        "[substation.service] API returned mock data in a non-dev environment. " +
+        "Ensure substations are seeded in the database for this tenant."
+      );
+    }
+
+    return data;
   } catch (apiErr) {
     if (apiErr instanceof DOMException && apiErr.name === "AbortError") throw apiErr;
-  }
 
-  // ── 2. Mock fallback ──────────────────────────────────────────────────────
-  return buildMockData();
+    // Only fall back to in-memory mock in development
+    const isDev =
+      typeof process !== "undefined" &&
+      (process.env.NODE_ENV === "development" ||
+        process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true");
+
+    if (isDev) {
+      return buildMockData();
+    }
+
+    // In production, propagate the error rather than silently serving stale data
+    throw apiErr;
+  }
 }
 
 /**

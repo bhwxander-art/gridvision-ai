@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -87,6 +87,14 @@ function riskScoreLabel(score: number): string {
   return "Low";
 }
 
+// ── AI Insights types ─────────────────────────────────────────────────────────
+
+interface AiInsightsData {
+  summary: string;
+  planningNote: string;
+  enrichedRecommendations: Array<{ id: string; narrative: string }>;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function SystemRiskStrip({
@@ -146,7 +154,13 @@ function SystemRiskStrip({
   );
 }
 
-function RecommendationCard({ rec }: { rec: PlanningRecommendation }) {
+function RecommendationCard({
+  rec,
+  narrative,
+}: {
+  rec: PlanningRecommendation;
+  narrative?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const urgStyle = URGENCY_STYLE[rec.urgency];
   const Icon = CATEGORY_ICON[rec.category];
@@ -182,7 +196,7 @@ function RecommendationCard({ rec }: { rec: PlanningRecommendation }) {
         {/* Risk reduction */}
         <div className="shrink-0 text-right">
           <p className="font-mono text-lg font-semibold text-emerald-400">
-            −{rec.riskReductionPct}%
+            -{rec.riskReductionPct}%
           </p>
           <p className="text-[10px] text-muted-foreground">risk reduction</p>
         </div>
@@ -206,6 +220,13 @@ function RecommendationCard({ rec }: { rec: PlanningRecommendation }) {
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         {rec.rationale}
       </p>
+
+      {/* AI narrative */}
+      {narrative && (
+        <p className="mt-2 text-xs italic leading-relaxed text-primary/70">
+          {narrative}
+        </p>
+      )}
 
       {/* Capex */}
       {rec.estimatedCapexM > 0 && (
@@ -247,10 +268,111 @@ function RecommendationCard({ rec }: { rec: PlanningRecommendation }) {
   );
 }
 
+// ── AI Insights Panel ─────────────────────────────────────────────────────────
+
+function AiInsightsPanel({ data }: { data: AiInsightsData }) {
+  if (!data.summary && !data.planningNote) return null;
+
+  return (
+    <div className="space-y-3">
+      {data.summary && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <CardTitle className="text-sm">AI Executive Summary</CardTitle>
+              <span className="ml-auto text-[9px] text-muted-foreground">
+                Powered by Claude
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {data.summary}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      {data.planningNote && (
+        <Card className="border-border/40 bg-[#0d1219]/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Strategic Planning Note</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {data.planningNote}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function AiInsightsSkeleton() {
+  return (
+    <Card className="border-border/40 bg-[#0d1219]/80">
+      <CardContent className="py-4">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Sparkles className="h-3.5 w-3.5 animate-pulse text-primary" />
+          Claude is analyzing your grid...
+        </div>
+        <div className="mt-3 space-y-2">
+          <div className="h-3 animate-pulse rounded bg-border/40" />
+          <div className="h-3 w-3/4 animate-pulse rounded bg-border/40" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function CopilotPanel(props: CopilotInput) {
   const report = useMemo(() => runCopilot(props), [props]);
+  const [aiInsights, setAiInsights] = useState<AiInsightsData | null>(null);
+  const [aiLoading, setAiLoading] = useState(true);
+
+  useEffect(() => {
+    const criticalCount = props.portfolio.filter((ss) => {
+      const util = ss.peakLoadMW / ss.nameplateMVA;
+      return util >= 0.95;
+    }).length;
+    const dcQueueMW = props.queue.reduce(
+      (sum, dc) => (dc.status !== "energized" ? sum + dc.requestedMW : sum),
+      0
+    );
+
+    fetch("/api/copilot/ai-insights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recommendations: report.recommendations,
+        systemRiskScore: report.systemRiskScore,
+        portfolioSummary: {
+          substationCount: props.portfolio.length,
+          criticalCount,
+          dcQueueMW,
+        },
+      }),
+    })
+      .then((r) => r.json())
+      .then((data: AiInsightsData) => {
+        setAiInsights(data);
+      })
+      .catch(() => {
+        setAiInsights({ summary: "", planningNote: "", enrichedRecommendations: [] });
+      })
+      .finally(() => setAiLoading(false));
+  }, [report, props.portfolio, props.queue]);
+
+  const narrativeMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const e of aiInsights?.enrichedRecommendations ?? []) {
+      m[e.id] = e.narrative;
+    }
+    return m;
+  }, [aiInsights]);
 
   return (
     <div className="space-y-6">
@@ -289,6 +411,12 @@ export function CopilotPanel(props: CopilotInput) {
         </CardContent>
       </Card>
 
+      {/* AI Insights */}
+      {aiLoading && <AiInsightsSkeleton />}
+      {!aiLoading && aiInsights && (
+        <AiInsightsPanel data={aiInsights} />
+      )}
+
       {/* Recommendation list */}
       {report.recommendations.length === 0 ? (
         <Card className="border-border/40 bg-[#0d1219]/80">
@@ -300,7 +428,11 @@ export function CopilotPanel(props: CopilotInput) {
       ) : (
         <div className="space-y-3">
           {report.recommendations.map((rec) => (
-            <RecommendationCard key={rec.id} rec={rec} />
+            <RecommendationCard
+              key={rec.id}
+              rec={rec}
+              narrative={narrativeMap[rec.id]}
+            />
           ))}
         </div>
       )}

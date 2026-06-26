@@ -96,7 +96,7 @@ export async function getCurrentTenant(): Promise<TenantContext | null> {
       isSuperAdmin,
     };
   } catch {
-    return demoTenantContext();
+    return null;
   }
 }
 
