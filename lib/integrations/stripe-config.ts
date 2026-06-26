@@ -10,8 +10,12 @@ const stripeKey = process.env.STRIPE_SECRET_KEY || "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
-if (!stripeKey && process.env.NODE_ENV === "production") {
-  throw new Error("STRIPE_SECRET_KEY is required in production");
+// Validate at request-time (not module load) to allow builds without secrets.
+// Call this at the start of any handler that needs Stripe.
+export function requireStripeKey(): void {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error("STRIPE_SECRET_KEY is required in production");
+  }
 }
 
 // Stripe client - import real SDK when available

@@ -273,3 +273,28 @@ export interface DbSubstationWithRelations extends DbSubstation {
   transformers: DbTransformer[];
   feeders: DbFeeder[];
 }
+
+// ── iso_load_history ──────────────────────────────────────────────────────────
+
+export interface DbIsoLoadRecord {
+  id: string;
+  timestamp: string;
+  actual_load_mw: number;
+  forecast_load_mw: number;
+  created_at: string;
+}
+
+// ── iso_load_forecasts ────────────────────────────────────────────────────────
+
+export interface DbIsoLoadForecast {
+  id: string;
+  forecast_for: string;
+  predicted_load_mw: number;
+  confidence_low_mw: number;
+  confidence_high_mw: number;
+  model_type: string;
+  model_version: string;
+  generated_at: string;
+}
+
+export type DbIsoLoadForecastInsert = Omit<DbIsoLoadForecast, "id" | "generated_at">;
