@@ -21,6 +21,7 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Card,
   CardContent,
@@ -119,6 +120,8 @@ const HEALTH_STATUS_CONFIG: Record<
   critical: { label: "Critical", emoji: "🔴", scoreClass: "text-red-400",    badgeVariant: "danger"  },
 };
 
+const CHART_SKELETON_BARS = [45, 60, 50, 75, 85, 65, 55, 70, 80, 60, 45, 65];
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -213,7 +216,10 @@ export default function DashboardPage() {
                 </div>
               </>
             ) : loadLoading ? (
-              <div>Loading…</div>
+              <div className="space-y-1.5" role="status" aria-label="Loading data source">
+                <Skeleton className="ml-auto h-3 w-20" />
+                <Skeleton className="ml-auto h-3 w-32" />
+              </div>
             ) : (
               <div className="text-red-400">
                 {loadError?.message ?? "No data"}
@@ -225,30 +231,38 @@ export default function DashboardPage() {
         {/* KPI strip */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
           {/* Current Load */}
-          <Card className="border-border/60">
+          <Card className="border-border/60" aria-busy={loadLoading && !liveLoad}>
             <CardHeader className="pb-2">
               <CardDescription>Current Load</CardDescription>
               <CardTitle className="font-mono text-3xl text-primary">
-                {liveLoad
-                  ? liveLoad.current_load_mw.toLocaleString()
-                  : loadLoading
-                  ? "…"
-                  : "—"}
+                {liveLoad ? (
+                  liveLoad.current_load_mw.toLocaleString()
+                ) : loadLoading ? (
+                  <span className="inline-block h-9 w-28 animate-pulse rounded-md bg-secondary" aria-hidden="true" />
+                ) : (
+                  "—"
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground">
-                {liveLoad ? "MW · System-wide demand" : "MW · Awaiting sync"}
+                {liveLoad ? "MW · System-wide demand" : loadLoading ? <Skeleton className="h-3 w-32" /> : "MW · Awaiting sync"}
               </p>
             </CardContent>
           </Card>
 
           {/* 24h Peak */}
-          <Card className="border-border/60">
+          <Card className="border-border/60" aria-busy={histLoading && !high24h}>
             <CardHeader className="pb-2">
               <CardDescription>24-Hour Peak</CardDescription>
               <CardTitle className="font-mono text-2xl">
-                {high24h ? high24h.toLocaleString() : histLoading ? "…" : "—"}
+                {high24h ? (
+                  high24h.toLocaleString()
+                ) : histLoading ? (
+                  <span className="inline-block h-7 w-24 animate-pulse rounded-md bg-secondary" aria-hidden="true" />
+                ) : (
+                  "—"
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -257,11 +271,17 @@ export default function DashboardPage() {
           </Card>
 
           {/* 24h Valley */}
-          <Card className="border-border/60">
+          <Card className="border-border/60" aria-busy={histLoading && !low24h}>
             <CardHeader className="pb-2">
               <CardDescription>24-Hour Valley</CardDescription>
               <CardTitle className="font-mono text-2xl">
-                {low24h ? low24h.toLocaleString() : histLoading ? "…" : "—"}
+                {low24h ? (
+                  low24h.toLocaleString()
+                ) : histLoading ? (
+                  <span className="inline-block h-7 w-24 animate-pulse rounded-md bg-secondary" aria-hidden="true" />
+                ) : (
+                  "—"
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -270,11 +290,13 @@ export default function DashboardPage() {
           </Card>
 
           {/* Alert status */}
-          <Card className="border-border/60">
+          <Card className="border-border/60" aria-busy={loadLoading && readings.length === 0}>
             <CardHeader className="pb-2">
               <CardDescription>Alert Status</CardDescription>
               <div className="flex items-center gap-2 mt-1">
-                {topAlert === null ? (
+                {loadLoading && readings.length === 0 ? (
+                  <span className="inline-block h-6 w-28 animate-pulse rounded-md bg-secondary" aria-hidden="true" />
+                ) : topAlert === null ? (
                   <>
                     <CheckCircle2 className="h-5 w-5 text-green-400" />
                     <span className="font-semibold text-green-400">Normal</span>
@@ -322,8 +344,17 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {healthLoading && !health ? (
-              <div className="flex h-[120px] items-center justify-center text-sm text-muted-foreground">
-                Computing…
+              <div className="space-y-4" role="status" aria-label="Computing grid health score">
+                <div className="grid grid-cols-[auto_1fr] gap-6 items-start">
+                  <Skeleton className="h-14 w-16 rounded-lg" />
+                  <div className="space-y-3 pt-1">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-4/5" />
+                  </div>
+                </div>
+                <Skeleton className="h-9 w-full rounded-md" />
               </div>
             ) : health ? (
               <div className="space-y-4">
@@ -405,7 +436,22 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {chartData.length > 0 ? (
+            {histLoading && chartData.length === 0 ? (
+              <div
+                className="flex h-[220px] w-full items-end gap-1.5 px-2"
+                role="status"
+                aria-label="Loading chart data"
+              >
+                {CHART_SKELETON_BARS.map((h, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 animate-pulse rounded-t-sm bg-secondary"
+                    style={{ height: `${h}%` }}
+                    aria-hidden="true"
+                  />
+                ))}
+              </div>
+            ) : chartData.length > 0 ? (
               <div className="h-[220px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
@@ -467,7 +513,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-                {histLoading ? "Loading chart data…" : "No historical data available"}
+                No historical data available
               </div>
             )}
           </CardContent>
@@ -481,8 +527,8 @@ export default function DashboardPage() {
           </h2>
 
           {loadLoading && readings.length === 0 ? (
-            <div className="rounded-lg border border-border/40 p-4 text-sm text-muted-foreground">
-              Evaluating conditions…
+            <div className="space-y-2" role="status" aria-label="Loading alerts">
+              <Skeleton className="h-[68px] w-full rounded-lg" />
             </div>
           ) : alerts.length === 0 ? (
             <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-green-500/5 p-4">
