@@ -200,14 +200,14 @@ export default function DashboardPage() {
   const RiskIcon = getRiskIcon(result.riskLevel);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-14">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 sm:px-6 lg:px-8 space-y-14">
 
       {/* ════════════════════════════════════════════════════════════════════
           SECTION 1 — GRID MONITOR
           ════════════════════════════════════════════════════════════════════ */}
-      <section>
+      <section className="space-y-6">
         {/* Header */}
-        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Grid Monitor</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -264,7 +264,7 @@ export default function DashboardPage() {
         )}
 
         {/* KPI strip */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Current Load */}
           <Card className="border-border/60" aria-busy={loadLoading && !liveLoad}>
             <CardHeader className="pb-2">
@@ -370,7 +370,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Grid Health Score */}
-        <Card className="border-border/60 mb-6">
+        <Card className="border-border/60">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold">Grid Health Score</CardTitle>
@@ -476,7 +476,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* 24-Hour Load Trend */}
-        <Card className="border-border/60 mb-6">
+        <Card className="border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <Activity className="h-4 w-4 text-primary" />
@@ -626,7 +626,7 @@ export default function DashboardPage() {
           <h2 className="text-3xl font-bold tracking-tight">
             Forecast Dashboard
           </h2>
-          <p className="mt-2 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Model future electrical load growth and receive risk assessments
             with capacity recommendations.
           </p>
