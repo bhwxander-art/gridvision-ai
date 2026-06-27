@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/enterprise", label: "Planning Platform" },
+  { href: "/copilot", label: "AI Copilot" },
   { href: "/forecast", label: "Live Forecast" },
   { href: "/dashboard", label: "Grid Monitor" },
   { href: "/analytics", label: "Analytics" },

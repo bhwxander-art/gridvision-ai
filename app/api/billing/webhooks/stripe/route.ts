@@ -41,8 +41,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     markWebhookProcessed(event.id);
 
     // Handle webhook events
-    const subscription = event.data?.object as StripeEventObject | undefined;
-    const tenantId = (subscription?.metadata as StripeEventObject | undefined)?.tenantId;
+    const subscription = event.data?.object as StripeEventObject & {
+      metadata?: Record<string, string>;
+      subscription?: string;
+      amount_paid?: number;
+    };
+    const tenantId = subscription?.metadata?.tenantId;
 
     switch (event.type) {
       case "customer.subscription.created":
