@@ -15,6 +15,8 @@ const navLinks = [
   { href: "/dashboard", label: "Grid Monitor" },
   { href: "/analytics", label: "Analytics" },
   { href: "/map", label: "Grid Map" },
+  { href: "/import", label: "Import" },
+  { href: "/api-keys", label: "API Keys" },
   { href: "/about", label: "About" },
 ];
 

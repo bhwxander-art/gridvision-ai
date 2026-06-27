@@ -298,3 +298,54 @@ export interface DbIsoLoadForecast {
 }
 
 export type DbIsoLoadForecastInsert = Omit<DbIsoLoadForecast, "id" | "generated_at">;
+
+// ── chat_sessions ──────────────────────────────────────────────────────────────
+
+export interface DbChatSession {
+  id: string;
+  tenant_id: string;
+  user_id: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface DbChatMessage {
+  id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+// ── api_keys ──────────────────────────────────────────────────────────────────
+
+export interface DbApiKey {
+  id: string;
+  tenant_id: string;
+  name: string;
+  key_hash: string;
+  key_prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  request_count: number;
+}
+
+// ── notification_log ──────────────────────────────────────────────────────────
+
+export interface DbNotificationLog {
+  id: string;
+  tenant_id: string;
+  event_type: string;
+  channel: "email" | "slack" | "teams";
+  status: "pending" | "sent" | "failed";
+  recipient: string | null;
+  subject: string | null;
+  error: string | null;
+  sent_at: string | null;
+  created_at: string;
+}

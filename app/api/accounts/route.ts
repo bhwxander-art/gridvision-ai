@@ -51,19 +51,40 @@ export async function GET(req: NextRequest): Promise<NextResponse<AccountsRespon
       }
     }
 
-    // ── 2. Fallback to seeded mock data ────────────────────────────────────────
+    // ── 2. Fallback ───────────────────────────────────────────────────────────
+    // In development, return mock data so local work is easy.
+    // In production, return empty array — do not serve fake data to real users.
+    const isDev = process.env.NODE_ENV !== "production";
+    if (isDev) {
+      return NextResponse.json(
+        {
+          accounts: mockAccounts,
+          tenantId,
+          source: "mock",
+          count: mockAccounts.length,
+          _provenance: mockProvenance(),
+        },
+        {
+          headers: {
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
+            "X-Data-Source": "mock",
+          },
+        }
+      );
+    }
+
     return NextResponse.json(
       {
-        accounts: mockAccounts,
+        accounts: [],
         tenantId,
-        source: "mock",
-        count: mockAccounts.length,
-        _provenance: mockProvenance(),
+        source: "db",
+        count: 0,
+        _provenance: mockProvenance("no-data"),
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
-          "X-Data-Source": "mock",
+          "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
+          "X-Data-Source": "empty",
         },
       }
     );

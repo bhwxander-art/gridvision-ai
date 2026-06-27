@@ -18,7 +18,11 @@ interface NotificationPreferences {
   emailOnDataStale?: boolean;
   emailOnProjectUpdate?: boolean;
   emailOnAccountUpdate?: boolean;
+  emailOnHealthAlert?: boolean;
+  emailOnCapacityWarning?: boolean;
+  emailOnImportComplete?: boolean;
   slackWebhookUrl?: string;
+  teamsWebhookUrl?: string;
 }
 
 interface SettingsFormState {
@@ -40,7 +44,11 @@ const DEFAULT_SETTINGS: SettingsFormState = {
     emailOnDataStale: false,
     emailOnProjectUpdate: false,
     emailOnAccountUpdate: false,
+    emailOnHealthAlert: false,
+    emailOnCapacityWarning: false,
+    emailOnImportComplete: false,
     slackWebhookUrl: "",
+    teamsWebhookUrl: "",
   },
 };
 
@@ -107,6 +115,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [currentPlan, setCurrentPlan] = useState("Starter");
+  const [testingChannel, setTestingChannel] = useState<"slack" | "teams" | null>(null);
 
   useEffect(() => {
     fetch("/api/tenants/settings")
@@ -114,6 +123,7 @@ export default function SettingsPage() {
         if (!r.ok) return;
         const d = await r.json();
         const s = d.settings as Record<string, unknown>;
+        const prefs = (s.notificationPreferences as NotificationPreferences) ?? {};
         setForm({
           companyName: (s.companyName as string) ?? "",
           timezone: (s.timezone as string) ?? "UTC",
@@ -121,16 +131,17 @@ export default function SettingsPage() {
           logoUrl: (s.logoUrl as string) ?? "",
           notificationEmail: (s.notificationEmail as string) ?? "",
           notificationPreferences: {
-            emailOnDataStale:
-              ((s.notificationPreferences as NotificationPreferences)?.emailOnDataStale) ?? false,
-            emailOnProjectUpdate:
-              ((s.notificationPreferences as NotificationPreferences)?.emailOnProjectUpdate) ?? false,
-            emailOnAccountUpdate:
-              ((s.notificationPreferences as NotificationPreferences)?.emailOnAccountUpdate) ?? false,
-            slackWebhookUrl:
-              ((s.notificationPreferences as NotificationPreferences)?.slackWebhookUrl) ?? "",
+            emailOnDataStale: prefs.emailOnDataStale ?? false,
+            emailOnProjectUpdate: prefs.emailOnProjectUpdate ?? false,
+            emailOnAccountUpdate: prefs.emailOnAccountUpdate ?? false,
+            emailOnHealthAlert: prefs.emailOnHealthAlert ?? false,
+            emailOnCapacityWarning: prefs.emailOnCapacityWarning ?? false,
+            emailOnImportComplete: prefs.emailOnImportComplete ?? false,
+            slackWebhookUrl: prefs.slackWebhookUrl ?? "",
+            teamsWebhookUrl: prefs.teamsWebhookUrl ?? "",
           },
         });
+        if (d.plan) setCurrentPlan(d.plan as string);
       })
       .catch(() => {/* keep defaults */})
       .finally(() => setLoading(false));
@@ -165,6 +176,27 @@ export default function SettingsPage() {
       showToast(err instanceof Error ? err.message : "Save failed.", "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestNotification(channel: "slack" | "teams") {
+    setTestingChannel(channel);
+    try {
+      const res = await fetch("/api/notifications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel }),
+      });
+      const d = (await res.json()) as { ok: boolean; error?: string };
+      if (d.ok) {
+        showToast(`Test ${channel} notification sent successfully.`, "success");
+      } else {
+        showToast(d.error ?? `${channel} test failed.`, "error");
+      }
+    } catch {
+      showToast(`Failed to send ${channel} test.`, "error");
+    } finally {
+      setTestingChannel(null);
     }
   }
 
@@ -313,25 +345,111 @@ export default function SettingsPage() {
                 }))
               }
             />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="slackWebhook">Slack Webhook URL</Label>
-            <Input
-              id="slackWebhook"
-              type="url"
-              value={form.notificationPreferences.slackWebhookUrl ?? ""}
-              onChange={(e) =>
+            <Toggle
+              label="Email on grid health alerts"
+              checked={!!form.notificationPreferences.emailOnHealthAlert}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   notificationPreferences: {
                     ...f.notificationPreferences,
-                    slackWebhookUrl: e.target.value,
+                    emailOnHealthAlert: v,
                   },
                 }))
               }
-              placeholder="https://hooks.slack.com/services/..."
             />
+            <Toggle
+              label="Email on capacity warnings"
+              checked={!!form.notificationPreferences.emailOnCapacityWarning}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  notificationPreferences: {
+                    ...f.notificationPreferences,
+                    emailOnCapacityWarning: v,
+                  },
+                }))
+              }
+            />
+            <Toggle
+              label="Email on import complete"
+              checked={!!form.notificationPreferences.emailOnImportComplete}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  notificationPreferences: {
+                    ...f.notificationPreferences,
+                    emailOnImportComplete: v,
+                  },
+                }))
+              }
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="slackWebhook">Slack Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="slackWebhook"
+                type="url"
+                value={form.notificationPreferences.slackWebhookUrl ?? ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    notificationPreferences: {
+                      ...f.notificationPreferences,
+                      slackWebhookUrl: e.target.value,
+                    },
+                  }))
+                }
+                placeholder="https://hooks.slack.com/services/..."
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={
+                  !form.notificationPreferences.slackWebhookUrl ||
+                  testingChannel === "slack"
+                }
+                onClick={() => void handleTestNotification("slack")}
+              >
+                {testingChannel === "slack" ? "Sending..." : "Test"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="teamsWebhook">Microsoft Teams Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="teamsWebhook"
+                type="url"
+                value={form.notificationPreferences.teamsWebhookUrl ?? ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    notificationPreferences: {
+                      ...f.notificationPreferences,
+                      teamsWebhookUrl: e.target.value,
+                    },
+                  }))
+                }
+                placeholder="https://outlook.office.com/webhook/..."
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={
+                  !form.notificationPreferences.teamsWebhookUrl ||
+                  testingChannel === "teams"
+                }
+                onClick={() => void handleTestNotification("teams")}
+              >
+                {testingChannel === "teams" ? "Sending..." : "Test"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -363,7 +481,7 @@ export default function SettingsPage() {
 
       {/* Save button */}
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={() => void handleSave()} disabled={saving}>
           {saving ? "Saving..." : "Save Settings"}
         </Button>
       </div>
