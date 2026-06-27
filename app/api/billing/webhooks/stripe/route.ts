@@ -39,7 +39,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     markWebhookProcessed(event.id);
 
     // Handle webhook events
-    const subscription = event.data?.object;
+    const subscription = event.data?.object as Record<string, unknown> & {
+      id?: string;
+      status?: string;
+      metadata?: Record<string, string>;
+      subscription?: string;
+      amount_paid?: number;
+    };
     const tenantId = subscription?.metadata?.tenantId;
 
     switch (event.type) {
