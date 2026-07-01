@@ -1,18 +1,23 @@
 /**
- * IFE repository — INFRA-012 / INFRA-013 / INFRA-015
+ * IFE repository — INFRA-012 / INFRA-013 / INFRA-015 / INFRA-016
  *
- * Scoped to the four tables the Hosting Capacity (INFRA-012), Upgrade
- * Analysis (INFRA-013), and Time-to-Power (INFRA-015) engines need:
- * ife_analyses (parent), ife_hosting_capacity (child), ife_upgrade_results
- * (child), and ife_time_to_power (child). The remaining two child tables
- * (ife_confidence_risk, ife_explanations) belong to their own future
- * tickets and are intentionally not touched here.
+ * Scoped to the five tables the Hosting Capacity (INFRA-012), Upgrade
+ * Analysis (INFRA-013), Time-to-Power (INFRA-015), and Confidence & Risk
+ * Scoring (INFRA-016) engines need: ife_analyses (parent),
+ * ife_hosting_capacity (child), ife_upgrade_results (child),
+ * ife_time_to_power (child), and ife_confidence_risk (child). The one
+ * remaining child table (ife_explanations) belongs to its own future
+ * ticket and is intentionally not touched here.
  *
  * The ife_time_to_power mapper/validator live in lib/time-to-power/
  * (mappers.ts / validation.ts) rather than lib/db/types-ife.ts, by explicit
  * instruction to keep that shared types file from growing further — only
  * its DbIfeTimeToPower/DbIfeTimeToPowerInsert/IfeTimeToPower type
- * declarations (already present there) are reused here.
+ * declarations (already present there) are reused here. ife_confidence_risk
+ * follows the same placement rule for its mapper (lib/confidence-risk/
+ * mappers.ts) — but its validator, validateIfeConfidenceRiskInsert, was
+ * already declared in types-ife.ts before INFRA-016 existed, so it is
+ * reused directly rather than duplicated.
  */
 
 import "server-only";
@@ -22,10 +27,13 @@ import {
   toIfeHostingCapacity,
   toIfeUpgradeResults,
   validateIfeAnalysisInsert,
+  validateIfeConfidenceRiskInsert,
   validateIfeHostingCapacityInsert,
   validateIfeUpgradeResultsInsert,
   type DbIfeAnalysis,
   type DbIfeAnalysisInsert,
+  type DbIfeConfidenceRisk,
+  type DbIfeConfidenceRiskInsert,
   type DbIfeHostingCapacity,
   type DbIfeHostingCapacityInsert,
   type DbIfeTimeToPower,
@@ -34,12 +42,14 @@ import {
   type DbIfeUpgradeResultsInsert,
   type IfeAnalysis,
   type IfeAnalysisStatus,
+  type IfeConfidenceRisk,
   type IfeHostingCapacity,
   type IfeTimeToPower,
   type IfeUpgradeResults,
 } from "@/lib/db/types-ife";
 import { toIfeTimeToPower } from "@/lib/time-to-power/mappers";
 import { validateIfeTimeToPowerInsert } from "@/lib/time-to-power/validation";
+import { toIfeConfidenceRisk } from "@/lib/confidence-risk/mappers";
 
 export class IfeRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -211,5 +221,37 @@ export class IfeRepository {
     if (error)
       throw new Error(`[IfeRepository.getTimeToPowerByAnalysisId] ${error.message}`);
     return data ? toIfeTimeToPower(data as DbIfeTimeToPower) : null;
+  }
+
+  // ── ife_confidence_risk ───────────────────────────────────────────────────────
+
+  async createConfidenceRisk(insert: DbIfeConfidenceRiskInsert): Promise<IfeConfidenceRisk> {
+    validateIfeConfidenceRiskInsert(insert);
+
+    const { data, error } = await this.client
+      .from("ife_confidence_risk")
+      .insert(insert)
+      .select()
+      .single();
+
+    if (error)
+      throw new Error(`[IfeRepository.createConfidenceRisk] ${error.message}`);
+    return toIfeConfidenceRisk(data as DbIfeConfidenceRisk);
+  }
+
+  async getConfidenceRiskByAnalysisId(
+    tenantId: string,
+    analysisId: string
+  ): Promise<IfeConfidenceRisk | null> {
+    const { data, error } = await this.client
+      .from("ife_confidence_risk")
+      .select("*")
+      .eq("analysis_id", analysisId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error)
+      throw new Error(`[IfeRepository.getConfidenceRiskByAnalysisId] ${error.message}`);
+    return data ? toIfeConfidenceRisk(data as DbIfeConfidenceRisk) : null;
   }
 }
