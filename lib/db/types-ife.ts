@@ -86,7 +86,7 @@ export interface UpgradeDetail {
   branch_name: string;
   upgrade_type: "thermal_uprate" | "new_line" | "substation_work";
   capacity_increase_mw: number;
-  cost_p50_m: number;
+  cost_p50_m: number | null; // null = not computed (no cost model), not a fabricated value
 }
 
 export interface DbIfeUpgradeResults {

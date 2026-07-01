@@ -1,11 +1,11 @@
 /**
- * IFE repository — INFRA-012
+ * IFE repository — INFRA-012 / INFRA-013
  *
- * Scoped narrowly to the two tables the Hosting Capacity engine needs:
- * ife_analyses (parent) and ife_hosting_capacity (child). The other five
- * child tables (ife_upgrade_results, ife_time_to_power, ife_confidence_risk,
- * ife_explanations, ife_outcome_tracking) belong to their own future
- * tickets and are intentionally not touched here.
+ * Scoped to the three tables the Hosting Capacity (INFRA-012) and Upgrade
+ * Analysis (INFRA-013) engines need: ife_analyses (parent), ife_hosting_
+ * capacity (child), and ife_upgrade_results (child). The remaining three
+ * child tables (ife_time_to_power, ife_confidence_risk, ife_explanations)
+ * belong to their own future tickets and are intentionally not touched here.
  */
 
 import "server-only";
@@ -13,15 +13,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   toIfeAnalysis,
   toIfeHostingCapacity,
+  toIfeUpgradeResults,
   validateIfeAnalysisInsert,
   validateIfeHostingCapacityInsert,
+  validateIfeUpgradeResultsInsert,
   type DbIfeAnalysis,
   type DbIfeAnalysisInsert,
   type DbIfeHostingCapacity,
   type DbIfeHostingCapacityInsert,
+  type DbIfeUpgradeResults,
+  type DbIfeUpgradeResultsInsert,
   type IfeAnalysis,
   type IfeAnalysisStatus,
   type IfeHostingCapacity,
+  type IfeUpgradeResults,
 } from "@/lib/db/types-ife";
 
 export class IfeRepository {
@@ -128,5 +133,39 @@ export class IfeRepository {
     if (error)
       throw new Error(`[IfeRepository.getHostingCapacityByAnalysisId] ${error.message}`);
     return data ? toIfeHostingCapacity(data as DbIfeHostingCapacity) : null;
+  }
+
+  // ── ife_upgrade_results ──────────────────────────────────────────────────────
+
+  async createUpgradeResults(
+    insert: DbIfeUpgradeResultsInsert
+  ): Promise<IfeUpgradeResults> {
+    validateIfeUpgradeResultsInsert(insert);
+
+    const { data, error } = await this.client
+      .from("ife_upgrade_results")
+      .insert(insert)
+      .select()
+      .single();
+
+    if (error)
+      throw new Error(`[IfeRepository.createUpgradeResults] ${error.message}`);
+    return toIfeUpgradeResults(data as DbIfeUpgradeResults);
+  }
+
+  async getUpgradeResultsByAnalysisId(
+    tenantId: string,
+    analysisId: string
+  ): Promise<IfeUpgradeResults | null> {
+    const { data, error } = await this.client
+      .from("ife_upgrade_results")
+      .select("*")
+      .eq("analysis_id", analysisId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error)
+      throw new Error(`[IfeRepository.getUpgradeResultsByAnalysisId] ${error.message}`);
+    return data ? toIfeUpgradeResults(data as DbIfeUpgradeResults) : null;
   }
 }
