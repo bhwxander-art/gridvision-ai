@@ -68,7 +68,27 @@ export interface DbQueueProject {
 }
 
 export interface DbQueueProjectInsert
-  extends Omit<DbQueueProject, "id" | "created_at" | "updated_at"> {
+  extends Omit<
+    DbQueueProject,
+    | "id"
+    | "created_at"
+    | "updated_at"
+    | "developer"
+    | "project_type"
+    | "poi_bus_id"
+    | "poi_description"
+    | "county"
+    | "state_abbr"
+    | "in_service_mw"
+    | "study_start_date"
+    | "target_cod"
+    | "actual_cod"
+    | "network_upgrade_cost_m"
+    | "project_cost_share_m"
+    | "withdrawal_probability"
+    | "ife_last_run_at"
+    | "metadata"
+  > {
   id?: string;
   developer?: string | null;
   project_type?: ProjectType;
@@ -107,7 +127,18 @@ export interface DbQueueStatusHistory {
 }
 
 export interface DbQueueStatusHistoryInsert
-  extends Omit<DbQueueStatusHistory, "id" | "created_at"> {
+  extends Omit<
+    DbQueueStatusHistory,
+    | "id"
+    | "created_at"
+    | "from_status"
+    | "capacity_mw_snapshot"
+    | "months_in_queue_snapshot"
+    | "upgrade_cost_m_snapshot"
+    | "cost_share_m_snapshot"
+    | "source"
+    | "notes"
+  > {
   id?: string;
   from_status?: QueueStatus | null;
   capacity_mw_snapshot?: number | null;

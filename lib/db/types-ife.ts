@@ -32,7 +32,19 @@ export interface DbIfeAnalysis {
 }
 
 export interface DbIfeAnalysisInsert
-  extends Omit<DbIfeAnalysis, "id" | "status" | "progress_pct" | "queued_at" | "created_at" | "updated_at"> {
+  extends Omit<
+    DbIfeAnalysis,
+    | "id"
+    | "status"
+    | "progress_pct"
+    | "queued_at"
+    | "created_at"
+    | "updated_at"
+    | "error_message"
+    | "started_at"
+    | "completed_at"
+    | "idempotency_key"
+  > {
   id?: string;
   status?: IfeAnalysisStatus;
   progress_pct?: number;

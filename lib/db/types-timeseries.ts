@@ -52,7 +52,8 @@ export interface DbScadaReading {
   source: string;
 }
 
-export interface DbScadaReadingInsert extends DbScadaReading {
+export interface DbScadaReadingInsert
+  extends Omit<DbScadaReading, "model_id" | "bus_id" | "branch_id" | "quality" | "source"> {
   model_id?: string | null;
   bus_id?: string | null;
   branch_id?: string | null;
@@ -77,7 +78,11 @@ export interface DbLmpPrice {
   interval_min: 5 | 15 | 60;
 }
 
-export interface DbLmpPriceInsert extends DbLmpPrice {
+export interface DbLmpPriceInsert
+  extends Omit<
+    DbLmpPrice,
+    "bus_id" | "pnode_name" | "lmp_energy" | "lmp_congestion" | "lmp_loss" | "market_type" | "interval_min"
+  > {
   bus_id?: string | null;
   pnode_name?: string | null;
   lmp_energy?: number | null;
@@ -116,7 +121,11 @@ export interface DbGeneratorOutput {
   interval_min: number;
 }
 
-export interface DbGeneratorOutputInsert extends DbGeneratorOutput {
+export interface DbGeneratorOutputInsert
+  extends Omit<
+    DbGeneratorOutput,
+    "generator_name" | "bus_id" | "scheduled_mw" | "capacity_mw" | "source" | "interval_min"
+  > {
   generator_name?: string | null;
   bus_id?: string | null;
   scheduled_mw?: number | null;
@@ -146,7 +155,20 @@ export interface DbWeatherObservation {
   source: string;
 }
 
-export interface DbWeatherObservationInsert extends DbWeatherObservation {
+export interface DbWeatherObservationInsert
+  extends Omit<
+    DbWeatherObservation,
+    | "station_name"
+    | "temp_c"
+    | "wind_speed_ms"
+    | "wind_dir_deg"
+    | "solar_irr_wm2"
+    | "precip_mm"
+    | "humidity_pct"
+    | "pressure_hpa"
+    | "forecast_horizon_h"
+    | "model_run_ts"
+  > {
   station_name?: string | null;
   temp_c?: number | null;
   wind_speed_ms?: number | null;
@@ -174,7 +196,11 @@ export interface DbAmiInterval {
   customer_type: CustomerType;
 }
 
-export interface DbAmiIntervalInsert extends DbAmiInterval {
+export interface DbAmiIntervalInsert
+  extends Omit<
+    DbAmiInterval,
+    "feeder_id" | "substation_id" | "zip_code" | "demand_kw" | "voltage_v" | "customer_type"
+  > {
   feeder_id?: string | null;
   substation_id?: string | null;
   zip_code?: string | null;

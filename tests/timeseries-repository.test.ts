@@ -180,7 +180,7 @@ function makeClient(
     order: vi.fn().mockImplementation(() =>
       Promise.resolve({ data: resolveData, error: resolveError })
     ),
-    _resolve: (data, err?) => {
+    _resolve: (data: unknown[], err?: { message: string }) => {
       resolveData = data;
       resolveError = err ? err : null;
     },

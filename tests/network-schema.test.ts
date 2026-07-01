@@ -574,6 +574,10 @@ describe.skipIf(!INTEGRATION)("NetworkRepository integration", () => {
       bus_number: 1,
       name: "BUS-1",
       base_kv: 115.0,
+      latitude: null,
+      longitude: null,
+      zone: null,
+      area: null,
     });
     createdBusAId = busA.id;
 
@@ -583,6 +587,10 @@ describe.skipIf(!INTEGRATION)("NetworkRepository integration", () => {
       bus_number: 2,
       name: "BUS-2",
       base_kv: 115.0,
+      latitude: null,
+      longitude: null,
+      zone: null,
+      area: null,
     });
     createdBusBId = busB.id;
 
@@ -661,6 +669,10 @@ describe.skipIf(!INTEGRATION)("NetworkRepository integration", () => {
         bus_number: 1, // duplicate
         name: "BUS-1-DUP",
         base_kv: 115.0,
+        latitude: null,
+        longitude: null,
+        zone: null,
+        area: null,
       })
     ).rejects.toThrow();
   });
@@ -713,6 +725,10 @@ describe.skipIf(!INTEGRATION)("NetworkRepository integration", () => {
       bus_number: 1000 + i,
       name: `BATCH-BUS-${i}`,
       base_kv: 115.0,
+      latitude: null,
+      longitude: null,
+      zone: null,
+      area: null,
     }));
     const buses = await repo.createBusesBatch(largeBatch);
     expect(buses).toHaveLength(600);

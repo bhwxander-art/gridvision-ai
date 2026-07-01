@@ -169,7 +169,9 @@ export class SupabasePtdfStorage implements PtdfStorageAdapter {
   async store(tenantId: string, matrix: PtdfMatrix): Promise<void> {
     const path = storagePath(tenantId, modelId(matrix));
     const bytes = serialisePtdf(matrix);
-    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    // Type-only cast: Uint8Array<ArrayBufferLike> vs BlobPart's Uint8Array<ArrayBuffer>
+    // (TS lib generics mismatch) — same bytes, same Blob, no behavior change.
+    const blob = new Blob([bytes as unknown as BlobPart], { type: "application/octet-stream" });
 
     const { error } = await this.client.storage
       .from(BUCKET)

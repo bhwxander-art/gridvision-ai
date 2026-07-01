@@ -67,7 +67,7 @@ export interface DbNetworkBus {
 }
 
 export interface DbNetworkBusInsert
-  extends Omit<DbNetworkBus, "id" | "created_at" | "updated_at"> {
+  extends Omit<DbNetworkBus, "id" | "created_at" | "updated_at" | "bus_type" | "vmin_pu" | "vmax_pu"> {
   id?: string;
   bus_type?: BusType;
   vmin_pu?: number;
@@ -99,7 +99,20 @@ export interface DbNetworkBranch {
 }
 
 export interface DbNetworkBranchInsert
-  extends Omit<DbNetworkBranch, "id" | "created_at" | "updated_at"> {
+  extends Omit<
+    DbNetworkBranch,
+    | "id"
+    | "created_at"
+    | "updated_at"
+    | "branch_type"
+    | "r_pu"
+    | "b_pu"
+    | "rate_b_mw"
+    | "rate_c_mw"
+    | "tap_ratio"
+    | "phase_shift_deg"
+    | "in_service"
+  > {
   id?: string;
   branch_type?: BranchType;
   r_pu?: number;
