@@ -1,11 +1,18 @@
 /**
- * IFE repository — INFRA-012 / INFRA-013
+ * IFE repository — INFRA-012 / INFRA-013 / INFRA-015
  *
- * Scoped to the three tables the Hosting Capacity (INFRA-012) and Upgrade
- * Analysis (INFRA-013) engines need: ife_analyses (parent), ife_hosting_
- * capacity (child), and ife_upgrade_results (child). The remaining three
- * child tables (ife_time_to_power, ife_confidence_risk, ife_explanations)
- * belong to their own future tickets and are intentionally not touched here.
+ * Scoped to the four tables the Hosting Capacity (INFRA-012), Upgrade
+ * Analysis (INFRA-013), and Time-to-Power (INFRA-015) engines need:
+ * ife_analyses (parent), ife_hosting_capacity (child), ife_upgrade_results
+ * (child), and ife_time_to_power (child). The remaining two child tables
+ * (ife_confidence_risk, ife_explanations) belong to their own future
+ * tickets and are intentionally not touched here.
+ *
+ * The ife_time_to_power mapper/validator live in lib/time-to-power/
+ * (mappers.ts / validation.ts) rather than lib/db/types-ife.ts, by explicit
+ * instruction to keep that shared types file from growing further — only
+ * its DbIfeTimeToPower/DbIfeTimeToPowerInsert/IfeTimeToPower type
+ * declarations (already present there) are reused here.
  */
 
 import "server-only";
@@ -21,13 +28,18 @@ import {
   type DbIfeAnalysisInsert,
   type DbIfeHostingCapacity,
   type DbIfeHostingCapacityInsert,
+  type DbIfeTimeToPower,
+  type DbIfeTimeToPowerInsert,
   type DbIfeUpgradeResults,
   type DbIfeUpgradeResultsInsert,
   type IfeAnalysis,
   type IfeAnalysisStatus,
   type IfeHostingCapacity,
+  type IfeTimeToPower,
   type IfeUpgradeResults,
 } from "@/lib/db/types-ife";
+import { toIfeTimeToPower } from "@/lib/time-to-power/mappers";
+import { validateIfeTimeToPowerInsert } from "@/lib/time-to-power/validation";
 
 export class IfeRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -167,5 +179,37 @@ export class IfeRepository {
     if (error)
       throw new Error(`[IfeRepository.getUpgradeResultsByAnalysisId] ${error.message}`);
     return data ? toIfeUpgradeResults(data as DbIfeUpgradeResults) : null;
+  }
+
+  // ── ife_time_to_power ─────────────────────────────────────────────────────────
+
+  async createTimeToPower(insert: DbIfeTimeToPowerInsert): Promise<IfeTimeToPower> {
+    validateIfeTimeToPowerInsert(insert);
+
+    const { data, error } = await this.client
+      .from("ife_time_to_power")
+      .insert(insert)
+      .select()
+      .single();
+
+    if (error)
+      throw new Error(`[IfeRepository.createTimeToPower] ${error.message}`);
+    return toIfeTimeToPower(data as DbIfeTimeToPower);
+  }
+
+  async getTimeToPowerByAnalysisId(
+    tenantId: string,
+    analysisId: string
+  ): Promise<IfeTimeToPower | null> {
+    const { data, error } = await this.client
+      .from("ife_time_to_power")
+      .select("*")
+      .eq("analysis_id", analysisId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error)
+      throw new Error(`[IfeRepository.getTimeToPowerByAnalysisId] ${error.message}`);
+    return data ? toIfeTimeToPower(data as DbIfeTimeToPower) : null;
   }
 }
