@@ -1,23 +1,26 @@
 /**
- * IFE repository — INFRA-012 / INFRA-013 / INFRA-015 / INFRA-016
+ * IFE repository — INFRA-012 / INFRA-013 / INFRA-015 / INFRA-016 / INFRA-017
  *
- * Scoped to the five tables the Hosting Capacity (INFRA-012), Upgrade
- * Analysis (INFRA-013), Time-to-Power (INFRA-015), and Confidence & Risk
- * Scoring (INFRA-016) engines need: ife_analyses (parent),
- * ife_hosting_capacity (child), ife_upgrade_results (child),
- * ife_time_to_power (child), and ife_confidence_risk (child). The one
- * remaining child table (ife_explanations) belongs to its own future
- * ticket and is intentionally not touched here.
+ * Covers all six ife_analyses-scoped tables: ife_analyses (parent),
+ * ife_hosting_capacity, ife_upgrade_results, ife_time_to_power,
+ * ife_confidence_risk, and ife_explanations (children) — Hosting Capacity
+ * (INFRA-012), Upgrade Analysis (INFRA-013), Time-to-Power (INFRA-015),
+ * Confidence & Risk Scoring (INFRA-016), and Explanations (INFRA-017)
+ * respectively. This was the full, originally-anticipated scope of this
+ * repository (see its very first docstring, which named all of these as
+ * "future tickets") — nothing further is expected to be added here.
+ * ife_outcome_tracking is a distinct table (a feedback/validation loop, not
+ * one of ife_analyses's child result tables in the schema's own hierarchy
+ * comment) and belongs to its own future ticket with its own repository.
  *
- * The ife_time_to_power mapper/validator live in lib/time-to-power/
- * (mappers.ts / validation.ts) rather than lib/db/types-ife.ts, by explicit
- * instruction to keep that shared types file from growing further — only
- * its DbIfeTimeToPower/DbIfeTimeToPowerInsert/IfeTimeToPower type
- * declarations (already present there) are reused here. ife_confidence_risk
- * follows the same placement rule for its mapper (lib/confidence-risk/
- * mappers.ts) — but its validator, validateIfeConfidenceRiskInsert, was
- * already declared in types-ife.ts before INFRA-016 existed, so it is
- * reused directly rather than duplicated.
+ * The ife_time_to_power / ife_confidence_risk / ife_explanations
+ * mappers live in their own feature modules (lib/time-to-power/mappers.ts,
+ * lib/confidence-risk/mappers.ts, lib/explanations/mappers.ts) rather than
+ * lib/db/types-ife.ts, by explicit instruction to keep that shared types
+ * file from growing further — only their existing Db-row and domain type
+ * declarations already present there are reused here. Their validators follow the same
+ * rule EXCEPT validateIfeConfidenceRiskInsert, which was already declared
+ * in types-ife.ts before INFRA-016 existed and is reused directly.
  */
 
 import "server-only";
@@ -34,6 +37,8 @@ import {
   type DbIfeAnalysisInsert,
   type DbIfeConfidenceRisk,
   type DbIfeConfidenceRiskInsert,
+  type DbIfeExplanations,
+  type DbIfeExplanationsInsert,
   type DbIfeHostingCapacity,
   type DbIfeHostingCapacityInsert,
   type DbIfeTimeToPower,
@@ -50,6 +55,9 @@ import {
 import { toIfeTimeToPower } from "@/lib/time-to-power/mappers";
 import { validateIfeTimeToPowerInsert } from "@/lib/time-to-power/validation";
 import { toIfeConfidenceRisk } from "@/lib/confidence-risk/mappers";
+import { toIfeExplanations } from "@/lib/explanations/mappers";
+import { validateIfeExplanationsInsert } from "@/lib/explanations/validation";
+import type { IfeExplanations } from "@/lib/explanations/types";
 
 export class IfeRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -253,5 +261,37 @@ export class IfeRepository {
     if (error)
       throw new Error(`[IfeRepository.getConfidenceRiskByAnalysisId] ${error.message}`);
     return data ? toIfeConfidenceRisk(data as DbIfeConfidenceRisk) : null;
+  }
+
+  // ── ife_explanations ──────────────────────────────────────────────────────────
+
+  async createExplanations(insert: DbIfeExplanationsInsert): Promise<IfeExplanations> {
+    validateIfeExplanationsInsert(insert);
+
+    const { data, error } = await this.client
+      .from("ife_explanations")
+      .insert(insert)
+      .select()
+      .single();
+
+    if (error)
+      throw new Error(`[IfeRepository.createExplanations] ${error.message}`);
+    return toIfeExplanations(data as DbIfeExplanations);
+  }
+
+  async getExplanationsByAnalysisId(
+    tenantId: string,
+    analysisId: string
+  ): Promise<IfeExplanations | null> {
+    const { data, error } = await this.client
+      .from("ife_explanations")
+      .select("*")
+      .eq("analysis_id", analysisId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error)
+      throw new Error(`[IfeRepository.getExplanationsByAnalysisId] ${error.message}`);
+    return data ? toIfeExplanations(data as DbIfeExplanations) : null;
   }
 }
