@@ -7,11 +7,12 @@
  * implemented yet (Phase 3) — its tests remain `it.todo` below.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import type { IfeAnalysis, IfeUpgradeResults, UpgradeDetail } from "@/lib/db/types-ife";
 import type { IfeRepository } from "@/lib/db/repositories/ife.repository";
 import { computeUpgradeRanking } from "@/lib/upgrade-ranking/upgrade-ranking-engine";
 import { getUpgradeRankingForAnalysis } from "@/lib/upgrade-ranking/upgrade-ranking-pipeline";
+import * as urPipeline from "@/lib/upgrade-ranking/upgrade-ranking-pipeline";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -240,5 +241,95 @@ describe("getUpgradeRankingForAnalysis", () => {
 
     expect(ifeRepo.getAnalysis).toHaveBeenCalledWith("tenant-1", "analysis-1");
     expect(ifeRepo.getUpgradeResultsByAnalysisId).toHaveBeenCalledWith("tenant-1", "analysis-1");
+  });
+});
+
+// ── API route — request validation (INFRA-023 Phase 3B) ────────────────────────
+// Mirrors the conventions established in "POST /api/ife/analyses/[analysisId]/
+// upgrade-analysis — request validation" above: dynamically import the route,
+// set fake Supabase credentials for the duration of the block, and spy on the
+// pipeline module rather than hitting a real database.
+
+describe("GET /api/ife/analyses/[analysisId]/upgrade-ranking — request validation", () => {
+  const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  });
+
+  afterAll(() => {
+    if (originalUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+  });
+
+  async function callRoute(query: string, analysisId = "analysis-1") {
+    const { GET } = await import("@/app/api/ife/analyses/[analysisId]/upgrade-ranking/route");
+    const request = new Request(
+      `http://localhost/api/ife/analyses/${analysisId}/upgrade-ranking${query}`,
+      { method: "GET" }
+    );
+    return GET(request, { params: Promise.resolve({ analysisId }) });
+  }
+
+  it("400s when tenant_id is missing", async () => {
+    const res = await callRoute("");
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/tenant_id/);
+  });
+
+  it("400s when analysisId is empty", async () => {
+    const res = await callRoute("?tenant_id=t1", "");
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/analysis ID/);
+  });
+
+  it("200s and returns { analysis, ranking, computeMs } on success", async () => {
+    const spy = vi.spyOn(urPipeline, "getUpgradeRankingForAnalysis").mockResolvedValueOnce({
+      analysis: { id: "analysis-1" } as never,
+      ranking: { upgradesRanked: 0, rankings: [], computedAt: "2024-01-01T00:00:00Z" },
+      computeMs: 1,
+    });
+    try {
+      const res = await callRoute("?tenant_id=t1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.analysis).toEqual({ id: "analysis-1" });
+      expect(body.ranking).toEqual({ upgradesRanked: 0, rankings: [], computedAt: "2024-01-01T00:00:00Z" });
+      expect(body.computeMs).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("404s when the pipeline reports the analysis was not found", async () => {
+    const spy = vi
+      .spyOn(urPipeline, "getUpgradeRankingForAnalysis")
+      .mockRejectedValueOnce(new Error("[UpgradeRanking] Analysis x not found for tenant t1"));
+    try {
+      const res = await callRoute("?tenant_id=t1");
+      expect(res.status).toBe(404);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("500s with a prefixed message on an unexpected pipeline error", async () => {
+    const spy = vi
+      .spyOn(urPipeline, "getUpgradeRankingForAnalysis")
+      .mockRejectedValueOnce(new Error("boom"));
+    try {
+      const res = await callRoute("?tenant_id=t1");
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toMatch(/^Upgrade ranking failed: boom$/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

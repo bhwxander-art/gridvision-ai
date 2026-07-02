@@ -14,20 +14,61 @@
  * Response 200: { analysis, ranking, computeMs }
  * Response 400: missing tenant_id or analysisId
  * Response 404: analysis not found for this tenant
- * Response 500: unexpected error
- *
- * Phase 1 (INFRA-023): route signature and documentation only — no request
- * handling logic yet. Implemented in a later phase.
+ * Response 500: missing Supabase credentials, or unexpected error
  */
 
 import "server-only";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { IfeRepository } from "@/lib/db/repositories/ife.repository";
+import { getUpgradeRankingForAnalysis } from "@/lib/upgrade-ranking/upgrade-ranking-pipeline";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ analysisId: string }> }
 ): Promise<Response> {
-  throw new Error(
-    "[UpgradeRanking] GET /api/ife/analyses/[analysisId]/upgrade-ranking is not yet implemented (INFRA-023 Phase 1 — signatures only)"
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.json(
+      { error: "Server configuration error: missing Supabase credentials" },
+      { status: 500 }
+    );
+  }
+
+  const { analysisId } = await params;
+  const url = new URL(request.url);
+  const tenantId = url.searchParams.get("tenant_id")?.trim();
+
+  if (!tenantId) {
+    return NextResponse.json(
+      { error: "Missing required query parameter: tenant_id" },
+      { status: 400 }
+    );
+  }
+  if (!analysisId) {
+    return NextResponse.json({ error: "Missing analysis ID in path" }, { status: 400 });
+  }
+
+  const client = createClient(supabaseUrl, supabaseKey);
+  const ifeRepo = new IfeRepository(client);
+
+  try {
+    const { analysis, ranking, computeMs } = await getUpgradeRankingForAnalysis(
+      tenantId,
+      analysisId,
+      ifeRepo
+    );
+
+    return NextResponse.json({ analysis, ranking, computeMs });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("not found")) {
+      return NextResponse.json({ error: msg }, { status: 404 });
+    }
+    return NextResponse.json(
+      { error: `Upgrade ranking failed: ${msg}` },
+      { status: 500 }
+    );
+  }
 }
