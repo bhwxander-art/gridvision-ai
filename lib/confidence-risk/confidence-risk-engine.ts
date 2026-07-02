@@ -1,12 +1,17 @@
 /**
- * Confidence & Risk Scoring engine — INFRA-016
+ * Confidence & Risk Scoring engine — INFRA-016 (conf_model_calibration wired
+ * per INFRA-022)
  *
  * Pure computation only (no I/O): deterministic weighted-average scoring
  * over whichever components are actually available, with weights
- * renormalized over that available subset. See the approved technical
- * specification for the full rationale on why five of the eight schema
- * component columns are structurally unavailable today and are always
- * persisted as NULL.
+ * renormalized over that available subset. Four of the eight schema
+ * component columns (conf_mc_convergence, risk_cost_uncertainty,
+ * risk_congestion_trend, risk_withdrawal) remain structurally unavailable
+ * and always persisted as NULL — see the approved technical specifications
+ * for the full rationale. conf_model_calibration is no longer one of them:
+ * it is now computed deterministically from historical
+ * ife_outcome_tracking coverage data (INFRA-022), falling back to NULL only
+ * when a tenant has fewer than MIN_CALIBRATION_SAMPLE_SIZE observations.
  *
  * Bucket thresholds and default weights are named constants (types.ts) so a
  * future milestone can add a real component (e.g. once a cost model or a
@@ -17,7 +22,10 @@
 import {
   DEFAULT_CONFIDENCE_WEIGHTS,
   DEFAULT_RISK_WEIGHTS,
+  MIN_CALIBRATION_SAMPLE_SIZE,
   NEUTRAL_FALLBACK_SCORE,
+  NOMINAL_COD_COVERAGE,
+  NOMINAL_COST_COVERAGE,
   type ComponentBreakdown,
   type ComponentEntry,
   type ConfidenceRiskOptions,
@@ -35,6 +43,11 @@ export interface ConfidenceRiskInputs {
   timeToPowerPresent: boolean;
   /** Only meaningful when timeToPowerPresent is true. */
   activeQueueProjectsCount: number | null;
+  /** Tenant's historical outcome-coverage statistics — INFRA-022. See CoverageStats (types.ts). */
+  costCoverageRate: number | null;
+  costSampleSize: number;
+  codCoverageRate: number | null;
+  codSampleSize: number;
 }
 
 function bucketDataFreshness(daysSinceModel: number): number {
@@ -82,6 +95,45 @@ function toEntry(entry: WeightedEntry): ComponentEntry {
   };
 }
 
+function clamp0to100(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+/**
+ * conf_model_calibration — INFRA-022. Pure arithmetic: compares each
+ * interval's empirical historical coverage rate against its nominal coverage
+ * (80% for p10-p90, 50% for p25-p75); the closer the match, the higher the
+ * score. Reuses weightedAverage (above) to combine the cost/COD sub-scores —
+ * no new aggregation mechanism. Returns null (excluded from the outer
+ * confidence weighted average, same as every other unavailable component)
+ * when neither side has at least MIN_CALIBRATION_SAMPLE_SIZE observations.
+ */
+function computeModelCalibration(
+  inputs: Pick<ConfidenceRiskInputs, "costCoverageRate" | "costSampleSize" | "codCoverageRate" | "codSampleSize">
+): { value: number | null; reason?: string } {
+  const costUsable = inputs.costCoverageRate !== null && inputs.costSampleSize >= MIN_CALIBRATION_SAMPLE_SIZE;
+  const codUsable = inputs.codCoverageRate !== null && inputs.codSampleSize >= MIN_CALIBRATION_SAMPLE_SIZE;
+
+  if (!costUsable && !codUsable) {
+    return {
+      value: null,
+      reason: `fewer than ${MIN_CALIBRATION_SAMPLE_SIZE} historical outcome observations with a computed coverage flag`,
+    };
+  }
+
+  const subEntries: WeightedEntry[] = [];
+  if (costUsable) {
+    const error = Math.abs(inputs.costCoverageRate! - NOMINAL_COST_COVERAGE);
+    subEntries.push({ value: clamp0to100(Math.round(100 * (1 - error))), weight: 1 });
+  }
+  if (codUsable) {
+    const error = Math.abs(inputs.codCoverageRate! - NOMINAL_COD_COVERAGE);
+    subEntries.push({ value: clamp0to100(Math.round(100 * (1 - error))), weight: 1 });
+  }
+
+  return { value: weightedAverage(subEntries).score };
+}
+
 export function computeConfidenceRisk(
   inputs: ConfidenceRiskInputs,
   options: ConfidenceRiskOptions = {}
@@ -105,7 +157,8 @@ export function computeConfidenceRisk(
     (inputs.timeToPowerPresent ? 1 : 0);
   const confInputCompleteness = Math.round((100 * completedStages) / requiredStages);
 
-  const confModelCalibration: number | null = null;
+  const modelCalibration = computeModelCalibration(inputs);
+  const confModelCalibration = modelCalibration.value;
   const confMcConvergence: number | null = null;
 
   const riskQueueDepth =
@@ -124,7 +177,7 @@ export function computeConfidenceRisk(
     modelCalibration: {
       value: confModelCalibration,
       weight: confidenceWeights.modelCalibration,
-      reason: "no ife_outcome_tracking data yet — historical model-accuracy validation is a future milestone",
+      reason: modelCalibration.reason,
     },
     inputCompleteness: { value: confInputCompleteness, weight: confidenceWeights.inputCompleteness },
     mcConvergence: {

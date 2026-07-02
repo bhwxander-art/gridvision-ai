@@ -25,16 +25,21 @@
  *   over whatever remains available — see componentBreakdown in the response.
  *
  * Response 200: { analysis, confidenceRisk, computeMs }
- *   Note: conf_model_calibration, conf_mc_convergence, risk_cost_uncertainty,
- *   risk_congestion_trend, and risk_withdrawal are always null — each
- *   requires infrastructure (historical outcome tracking, Monte Carlo
- *   hosting capacity, a cost model, a congestion time-series, and a Cox PH
- *   withdrawal model respectively) that does not exist yet (see the
- *   approved technical specification). confidence_score and risk_score are
- *   always non-null numbers, computed as a weighted average over whichever
- *   components ARE available (falling back to a neutral 50 only if none
- *   are) — componentBreakdown discloses exactly which components
- *   contributed to each.
+ *   Note: conf_mc_convergence, risk_cost_uncertainty, risk_congestion_trend,
+ *   and risk_withdrawal are always null — each requires infrastructure
+ *   (Monte Carlo hosting capacity, a cost model, a congestion time-series,
+ *   and a Cox PH withdrawal model respectively) that does not exist yet (see
+ *   the approved technical specifications). conf_model_calibration is
+ *   computed deterministically from the tenant's historical
+ *   ife_outcome_tracking coverage data (INFRA-022) once at least
+ *   MIN_CALIBRATION_SAMPLE_SIZE observations exist, and is otherwise null —
+ *   this means conf_model_calibration (and therefore confidence_score) may
+ *   legitimately differ between two calls for the same tenant as their
+ *   historical outcome data accumulates; this is expected, not a regression.
+ *   confidence_score and risk_score are always non-null numbers, computed as
+ *   a weighted average over whichever components ARE available (falling
+ *   back to a neutral 50 only if none are) — componentBreakdown discloses
+ *   exactly which components contributed to each.
  * Response 400: analysis not yet completed, or invalid weight overrides
  * Response 404: analysis or network model not found for this tenant
  * Response 500: computation or storage error
@@ -45,6 +50,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { IfeRepository } from "@/lib/db/repositories/ife.repository";
 import { NetworkRepository } from "@/lib/db/repositories/network.repository";
+import { IfeCalibrationStatsRepository } from "@/lib/db/repositories/ife-calibration-stats.repository";
 import { computeAndPersistConfidenceRisk } from "@/lib/confidence-risk/confidence-risk-pipeline";
 import { IfeValidationError } from "@/lib/db/types-ife";
 
@@ -138,6 +144,7 @@ export async function POST(
   const client = createClient(supabaseUrl, supabaseKey);
   const ifeRepo = new IfeRepository(client);
   const networkRepo = new NetworkRepository(client);
+  const calibrationRepo = new IfeCalibrationStatsRepository(client);
 
   try {
     const { analysis, confidenceRisk, computeMs } = await computeAndPersistConfidenceRisk(
@@ -145,6 +152,7 @@ export async function POST(
       analysisId,
       ifeRepo,
       networkRepo,
+      calibrationRepo,
       {
         confidenceWeights: parsedConfidenceWeights,
         riskWeights: parsedRiskWeights,

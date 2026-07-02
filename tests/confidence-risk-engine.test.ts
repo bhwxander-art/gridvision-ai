@@ -1,14 +1,20 @@
 /**
  * INFRA-016 — Confidence & Risk Scoring engine tests
+ * (conf_model_calibration wiring — INFRA-022)
  *
  * Test plan:
  *  1. computeConfidenceRisk — bucket boundaries (data freshness, queue depth),
  *     renormalized weighted-average arithmetic, empty-set fallback to 50,
  *     custom weight overrides, componentBreakdown shape/reasons
+ *  1b. computeConfidenceRisk — conf_model_calibration (INFRA-022): insufficient
+ *     sample size, cost-only/COD-only/both usable, nominal-match scoring,
+ *     large-deviation scoring, sample-size boundary, score bounds
  *  2. IfeRepository — ife_confidence_risk CRUD against a mocked
  *     SupabaseClient (reusing the pre-existing validateIfeConfidenceRiskInsert)
+ *  2b. IfeCalibrationStatsRepository.getCoverageStats — all-NULL rows, mixed
+ *     TRUE/FALSE/NULL rows, zero-row tenant, tenant scoping
  *  3. computeAndPersistConfidenceRisk pipeline — repository integration,
- *     idempotency, precondition rejections
+ *     idempotency, precondition rejections, calibration-repo wiring
  *  4. API route — request validation
  *  5. Performance benchmark
  */
@@ -18,8 +24,14 @@ import {
   computeConfidenceRisk,
   type ConfidenceRiskInputs,
 } from "@/lib/confidence-risk/confidence-risk-engine";
-import { NEUTRAL_FALLBACK_SCORE } from "@/lib/confidence-risk/types";
+import {
+  NEUTRAL_FALLBACK_SCORE,
+  MIN_CALIBRATION_SAMPLE_SIZE,
+  NOMINAL_COST_COVERAGE,
+  NOMINAL_COD_COVERAGE,
+} from "@/lib/confidence-risk/types";
 import { IfeRepository } from "@/lib/db/repositories/ife.repository";
+import { IfeCalibrationStatsRepository } from "@/lib/db/repositories/ife-calibration-stats.repository";
 import * as crPipeline from "@/lib/confidence-risk/confidence-risk-pipeline";
 import { computeAndPersistConfidenceRisk } from "@/lib/confidence-risk/confidence-risk-pipeline";
 import type { IfeAnalysis, IfeConfidenceRisk, IfeHostingCapacity, IfeTimeToPower, IfeUpgradeResults } from "@/lib/db/types-ife";
@@ -39,6 +51,13 @@ function baseInputs(overrides: Partial<ConfidenceRiskInputs> = {}): ConfidenceRi
     upgradeResultsPresent: false,
     timeToPowerPresent: false,
     activeQueueProjectsCount: null,
+    // No historical outcome-coverage data by default — every existing test in this
+    // file relies on confModelCalibration staying null/unavailable unless a test
+    // explicitly overrides these (INFRA-022).
+    costCoverageRate: null,
+    costSampleSize: 0,
+    codCoverageRate: null,
+    codSampleSize: 0,
     ...overrides,
   };
 }
@@ -177,6 +196,106 @@ describe("computeConfidenceRisk — composite scoring and componentBreakdown", (
   });
 });
 
+// ── 1b. computeConfidenceRisk — conf_model_calibration (INFRA-022) ────────────
+
+describe("computeConfidenceRisk — conf_model_calibration", () => {
+  it("is null when neither cost nor COD has sufficient sample size", () => {
+    const result = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: 0.8,
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE - 1,
+        codCoverageRate: 0.5,
+        codSampleSize: MIN_CALIBRATION_SAMPLE_SIZE - 1,
+      })
+    );
+    expect(result.confModelCalibration).toBeNull();
+    expect(result.componentBreakdown.confidence.modelCalibration.available).toBe(false);
+    expect(result.componentBreakdown.confidence.modelCalibration.reason).toMatch(
+      /historical outcome observations/
+    );
+  });
+
+  it("is null when sample size data is entirely absent (rate null, size 0 — the zero-sample default)", () => {
+    const result = computeConfidenceRisk(baseInputs());
+    expect(result.confModelCalibration).toBeNull();
+  });
+
+  it("uses only the cost side when only cost has sufficient sample size", () => {
+    const result = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: NOMINAL_COST_COVERAGE,
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+        codCoverageRate: 0.5,
+        codSampleSize: MIN_CALIBRATION_SAMPLE_SIZE - 1, // below threshold — excluded
+      })
+    );
+    expect(result.confModelCalibration).toBe(100); // exact nominal match on the only usable side
+  });
+
+  it("uses only the COD side when only COD has sufficient sample size", () => {
+    const result = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: 0.8,
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE - 1, // below threshold — excluded
+        codCoverageRate: NOMINAL_COD_COVERAGE,
+        codSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+      })
+    );
+    expect(result.confModelCalibration).toBe(100);
+  });
+
+  it("combines both sides via weightedAverage when both are usable", () => {
+    const result = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: NOMINAL_COST_COVERAGE, // sub-score 100
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+        codCoverageRate: NOMINAL_COD_COVERAGE, // sub-score 100
+        codSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+      })
+    );
+    expect(result.confModelCalibration).toBe(100);
+  });
+
+  it("scores lower the further the empirical coverage rate deviates from nominal", () => {
+    const closeMatch = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: NOMINAL_COST_COVERAGE - 0.05,
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+      })
+    );
+    const farMatch = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: NOMINAL_COST_COVERAGE - 0.5,
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+      })
+    );
+    expect(closeMatch.confModelCalibration).not.toBeNull();
+    expect(farMatch.confModelCalibration).not.toBeNull();
+    expect(farMatch.confModelCalibration!).toBeLessThan(closeMatch.confModelCalibration!);
+  });
+
+  it("is usable exactly at the MIN_CALIBRATION_SAMPLE_SIZE boundary, not just above it", () => {
+    const result = computeConfidenceRisk(
+      baseInputs({
+        costCoverageRate: NOMINAL_COST_COVERAGE,
+        costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE, // exactly at the boundary
+      })
+    );
+    expect(result.confModelCalibration).not.toBeNull();
+  });
+
+  it("never produces a score outside [0, 100] across a wide range of coverage rates", () => {
+    for (const rate of [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]) {
+      const result = computeConfidenceRisk(
+        baseInputs({ costCoverageRate: rate, costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE })
+      );
+      expect(result.confModelCalibration).not.toBeNull();
+      expect(result.confModelCalibration!).toBeGreaterThanOrEqual(0);
+      expect(result.confModelCalibration!).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
 // ── 2. IfeRepository — ife_confidence_risk ─────────────────────────────────────
 
 describe("IfeRepository — ife_confidence_risk", () => {
@@ -258,6 +377,92 @@ describe("IfeRepository — ife_confidence_risk", () => {
     const repo = new IfeRepository(client);
     const row = await repo.getConfidenceRiskByAnalysisId("t1", "a1");
     expect(row).toBeNull();
+  });
+});
+
+// ── 2b. IfeCalibrationStatsRepository.getCoverageStats (INFRA-022) ────────────
+
+describe("IfeCalibrationStatsRepository.getCoverageStats", () => {
+  function makeMockSupabase(rows: Array<{ within_cost_p10_p90: boolean | null; within_cod_p25_p75: boolean | null }>) {
+    let capturedTenantId: string | undefined;
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: (_col: string, tenantId: string) => {
+            capturedTenantId = tenantId;
+            return Promise.resolve({ data: rows, error: null });
+          },
+        }),
+      }),
+    };
+    return { client: client as never, getCapturedTenantId: () => capturedTenantId };
+  }
+
+  it("returns null coverage rate and sampleSize 0 for a tenant with zero ife_outcome_tracking rows", async () => {
+    const { client } = makeMockSupabase([]);
+    const repo = new IfeCalibrationStatsRepository(client);
+    const stats = await repo.getCoverageStats("t1");
+    expect(stats).toEqual({
+      costCoverageRate: null,
+      costSampleSize: 0,
+      codCoverageRate: null,
+      codSampleSize: 0,
+    });
+  });
+
+  it("returns null coverage rate and sampleSize 0 when every row's column is NULL", async () => {
+    const { client } = makeMockSupabase([
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+    ]);
+    const repo = new IfeCalibrationStatsRepository(client);
+    const stats = await repo.getCoverageStats("t1");
+    expect(stats.costCoverageRate).toBeNull();
+    expect(stats.costSampleSize).toBe(0);
+    expect(stats.codCoverageRate).toBeNull();
+    expect(stats.codSampleSize).toBe(0);
+  });
+
+  it("excludes NULL rows from both numerator and denominator in mixed TRUE/FALSE/NULL data", async () => {
+    // 3 true + 2 false + 5 null -> sampleSize 5, coverageRate 0.6 (NOT sampleSize 10, NOT rate 0.3)
+    const { client } = makeMockSupabase([
+      { within_cost_p10_p90: true, within_cod_p25_p75: null },
+      { within_cost_p10_p90: true, within_cod_p25_p75: null },
+      { within_cost_p10_p90: true, within_cod_p25_p75: null },
+      { within_cost_p10_p90: false, within_cod_p25_p75: null },
+      { within_cost_p10_p90: false, within_cod_p25_p75: null },
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+      { within_cost_p10_p90: null, within_cod_p25_p75: null },
+    ]);
+    const repo = new IfeCalibrationStatsRepository(client);
+    const stats = await repo.getCoverageStats("t1");
+    expect(stats.costSampleSize).toBe(5);
+    expect(stats.costCoverageRate).toBeCloseTo(0.6);
+  });
+
+  it("computes cost and COD coverage independently from the same row set", async () => {
+    const { client } = makeMockSupabase([
+      { within_cost_p10_p90: true, within_cod_p25_p75: false },
+      { within_cost_p10_p90: true, within_cod_p25_p75: false },
+      { within_cost_p10_p90: false, within_cod_p25_p75: true },
+      { within_cost_p10_p90: null, within_cod_p25_p75: true },
+    ]);
+    const repo = new IfeCalibrationStatsRepository(client);
+    const stats = await repo.getCoverageStats("t1");
+    expect(stats.costSampleSize).toBe(3);
+    expect(stats.costCoverageRate).toBeCloseTo(2 / 3);
+    expect(stats.codSampleSize).toBe(4);
+    expect(stats.codCoverageRate).toBeCloseTo(2 / 4);
+  });
+
+  it("scopes the query by tenant_id", async () => {
+    const { client, getCapturedTenantId } = makeMockSupabase([]);
+    const repo = new IfeCalibrationStatsRepository(client);
+    await repo.getCoverageStats("tenant-xyz");
+    expect(getCapturedTenantId()).toBe("tenant-xyz");
   });
 });
 
@@ -352,6 +557,25 @@ describe("computeAndPersistConfidenceRisk — pipeline", () => {
     return { getModel: vi.fn(async () => model) } as unknown as NetworkRepository;
   }
 
+  function makeMockCalibrationRepo(
+    stats: Partial<{
+      costCoverageRate: number | null;
+      costSampleSize: number;
+      codCoverageRate: number | null;
+      codSampleSize: number;
+    }> = {}
+  ) {
+    return {
+      getCoverageStats: vi.fn(async () => ({
+        costCoverageRate: null,
+        costSampleSize: 0,
+        codCoverageRate: null,
+        codSampleSize: 0,
+        ...stats,
+      })),
+    } as unknown as IfeCalibrationStatsRepository;
+  }
+
   const sufficientHc: IfeHostingCapacity = {
     id: "hc-1",
     analysisId: "analysis-1",
@@ -390,12 +614,14 @@ describe("computeAndPersistConfidenceRisk — pipeline", () => {
       },
     });
     const networkRepo = makeMockNetworkRepo(makeModel());
+    const calibrationRepo = makeMockCalibrationRepo();
 
     const { analysis, confidenceRisk } = await computeAndPersistConfidenceRisk(
       "tenant-1",
       "analysis-1",
       ifeRepo,
-      networkRepo
+      networkRepo,
+      calibrationRepo
     );
 
     expect(analysis.id).toBe("analysis-1");
@@ -406,47 +632,88 @@ describe("computeAndPersistConfidenceRisk — pipeline", () => {
   it("throws when the analysis is not found", async () => {
     const { repo: ifeRepo } = makeMockIfeRepo({ analysis: null });
     const networkRepo = makeMockNetworkRepo(makeModel());
+    const calibrationRepo = makeMockCalibrationRepo();
     await expect(
-      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo)
+      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo, calibrationRepo)
     ).rejects.toThrow("not found");
   });
 
   it("throws when the analysis is not yet completed", async () => {
     const { repo: ifeRepo } = makeMockIfeRepo({ analysis: makeAnalysis({ status: "running" }) });
     const networkRepo = makeMockNetworkRepo(makeModel());
+    const calibrationRepo = makeMockCalibrationRepo();
     await expect(
-      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo)
+      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo, calibrationRepo)
     ).rejects.toThrow("is not completed");
   });
 
   it("throws when hosting capacity has not been computed (data-consistency invariant)", async () => {
     const { repo: ifeRepo } = makeMockIfeRepo({ analysis: makeAnalysis(), hostingCapacity: null });
     const networkRepo = makeMockNetworkRepo(makeModel());
+    const calibrationRepo = makeMockCalibrationRepo();
     await expect(
-      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo)
+      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo, calibrationRepo)
     ).rejects.toThrow("no usable hosting capacity result");
   });
 
   it("throws when the network model is not found", async () => {
     const { repo: ifeRepo } = makeMockIfeRepo({ analysis: makeAnalysis(), hostingCapacity: sufficientHc });
     const networkRepo = makeMockNetworkRepo(null);
+    const calibrationRepo = makeMockCalibrationRepo();
     await expect(
-      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo)
+      computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo, calibrationRepo)
     ).rejects.toThrow("not found");
   });
 
   it("idempotency: a repeat call returns the existing row without recomputing", async () => {
     const { repo: ifeRepo } = makeMockIfeRepo({ analysis: makeAnalysis(), hostingCapacity: sufficientHc });
     const networkRepo = makeMockNetworkRepo(makeModel());
+    const calibrationRepo = makeMockCalibrationRepo();
 
-    const first = await computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo);
+    const first = await computeAndPersistConfidenceRisk(
+      "tenant-1",
+      "analysis-1",
+      ifeRepo,
+      networkRepo,
+      calibrationRepo
+    );
     const createSpy = ifeRepo.createConfidenceRisk as ReturnType<typeof vi.fn>;
     const callsAfterFirst = createSpy.mock.calls.length;
 
-    const second = await computeAndPersistConfidenceRisk("tenant-1", "analysis-1", ifeRepo, networkRepo);
+    const second = await computeAndPersistConfidenceRisk(
+      "tenant-1",
+      "analysis-1",
+      ifeRepo,
+      networkRepo,
+      calibrationRepo
+    );
 
     expect(second.confidenceRisk.id).toBe(first.confidenceRisk.id);
     expect(createSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it("wires coverage stats into the engine, producing a non-null conf_model_calibration when sufficient historical data exists", async () => {
+    const { repo: ifeRepo, store } = makeMockIfeRepo({
+      analysis: makeAnalysis(),
+      hostingCapacity: sufficientHc,
+    });
+    const networkRepo = makeMockNetworkRepo(makeModel());
+    const calibrationRepo = makeMockCalibrationRepo({
+      costCoverageRate: NOMINAL_COST_COVERAGE,
+      costSampleSize: MIN_CALIBRATION_SAMPLE_SIZE,
+    });
+
+    const { confidenceRisk } = await computeAndPersistConfidenceRisk(
+      "tenant-1",
+      "analysis-1",
+      ifeRepo,
+      networkRepo,
+      calibrationRepo
+    );
+
+    expect(calibrationRepo.getCoverageStats).toHaveBeenCalledWith("tenant-1");
+    expect(confidenceRisk.confModelCalibration).toBe(100); // exact nominal match -> perfect score
+    expect(store.size).toBe(1);
   });
 });
 

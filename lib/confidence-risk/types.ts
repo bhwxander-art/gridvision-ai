@@ -1,22 +1,52 @@
 /**
  * Confidence & Risk Scoring engine public types — INFRA-016
+ * (conf_model_calibration wired per INFRA-022)
  *
  * Scope: deterministic, weighted-average composite scoring over only the
- * components that are actually computable today. Four of the eight schema
- * component columns (conf_model_calibration, conf_mc_convergence,
- * risk_cost_uncertainty, risk_congestion_trend, risk_withdrawal — five,
- * actually) require infrastructure that does not exist yet (a historical
- * outcome-validation loop, Monte Carlo hosting capacity, a cost model, a
- * congestion time-series, and a Cox PH withdrawal model, respectively) and
- * are persisted as NULL — see the approved technical specification §2 for
- * the full rationale. confidence_score and risk_score themselves are
- * NOT NULL in the schema, so they are always computed as a weighted
- * average over whichever components ARE available, with weights
- * renormalized over that available subset, falling back to a documented
- * neutral midpoint only if literally none are available.
+ * components that are actually computable today. Four schema component
+ * columns (conf_mc_convergence, risk_cost_uncertainty, risk_congestion_trend,
+ * risk_withdrawal) require infrastructure that does not exist yet (Monte
+ * Carlo hosting capacity, a cost model, a congestion time-series, and a Cox
+ * PH withdrawal model, respectively) and are persisted as NULL — see the
+ * approved technical specifications for the full rationale.
+ * conf_model_calibration is computed deterministically from historical
+ * ife_outcome_tracking coverage data (INFRA-022) — see CoverageStats below —
+ * falling back to NULL only when a tenant has insufficient historical
+ * observations. confidence_score and risk_score themselves are NOT NULL in
+ * the schema, so they are always computed as a weighted average over
+ * whichever components ARE available, with weights renormalized over that
+ * available subset, falling back to a documented neutral midpoint only if
+ * literally none are available.
  */
 
 export const NEUTRAL_FALLBACK_SCORE = 50;
+
+/**
+ * conf_model_calibration inputs/tunables — INFRA-022.
+ *
+ * A well-calibrated p10-p90 interval should nominally contain ~80% of actual
+ * outcomes; a well-calibrated p25-p75 interval should nominally contain ~50%.
+ * These nominal values, the minimum sample size, and the linear scoring
+ * formula in confidence-risk-engine.ts are explicit, tunable design choices —
+ * not fixed statistical requirements.
+ */
+export const NOMINAL_COST_COVERAGE = 0.8;
+export const NOMINAL_COD_COVERAGE = 0.5;
+export const MIN_CALIBRATION_SAMPLE_SIZE = 5;
+
+/**
+ * Aggregate historical outcome-coverage statistics for a tenant, sourced from
+ * ife_outcome_tracking.within_cost_p10_p90/within_cod_p25_p75 (INFRA-021).
+ * coverageRate is null (never 0) whenever sampleSize is 0 — see
+ * IfeCalibrationStatsRepository.getCoverageStats for the exact aggregation
+ * algorithm (NULL values excluded from both numerator and denominator).
+ */
+export interface CoverageStats {
+  costCoverageRate: number | null;
+  costSampleSize: number;
+  codCoverageRate: number | null;
+  codSampleSize: number;
+}
 
 export interface ConfidenceWeights {
   dataFreshness: number;

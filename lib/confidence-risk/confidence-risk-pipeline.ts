@@ -1,5 +1,6 @@
 /**
  * Confidence & Risk Scoring repository-integrated pipeline — INFRA-016
+ * (conf_model_calibration wired per INFRA-022)
  *
  * Operates on an EXISTING, already-completed ife_analyses record (same
  * pattern as Upgrade Analysis / Time-to-Power). Reads whichever of the
@@ -13,13 +14,24 @@
  * (unmodified) once, purely for the network model's date, to score
  * conf_data_freshness — no topology/bus/branch data is loaded.
  *
+ * INFRA-022 adds one more independent read: IfeCalibrationStatsRepository
+ * .getCoverageStats(tenantId), a tenant-wide aggregate over
+ * ife_outcome_tracking (INFRA-020/021) feeding conf_model_calibration. It is
+ * folded into the same Promise.all as the other independent reads below —
+ * no new sequencing concern, since it depends only on tenantId like the rest.
+ *
  * Idempotency: mirrors Upgrade Analysis / Time-to-Power's check-first
- * pattern. analysisId is the natural dedup key for ife_confidence_risk.
+ * pattern. analysisId is the natural dedup key for ife_confidence_risk. This
+ * is unchanged by INFRA-022: a repeat call still returns the already-computed
+ * row without recomputing, so conf_model_calibration reflects the tenant's
+ * calibration history AT THE TIME the row was first computed, not a
+ * live-updating value.
  */
 
 import "server-only";
 import type { IfeRepository } from "@/lib/db/repositories/ife.repository";
 import type { NetworkRepository } from "@/lib/db/repositories/network.repository";
+import type { IfeCalibrationStatsRepository } from "@/lib/db/repositories/ife-calibration-stats.repository";
 import type { IfeAnalysis, IfeConfidenceRisk } from "@/lib/db/types-ife";
 import { computeConfidenceRisk } from "./confidence-risk-engine";
 import type { ConfidenceRiskOptions } from "./types";
@@ -45,6 +57,7 @@ export async function computeAndPersistConfidenceRisk(
   analysisId: string,
   ifeRepo: IfeRepository,
   networkRepo: NetworkRepository,
+  calibrationRepo: IfeCalibrationStatsRepository,
   options: ConfidenceRiskOptions = {}
 ): Promise<ConfidenceRiskPipelineResult> {
   const t0 = performance.now();
@@ -70,11 +83,12 @@ export async function computeAndPersistConfidenceRisk(
     );
   }
 
-  const [model, hostingCapacity, upgradeResults, timeToPower] = await Promise.all([
+  const [model, hostingCapacity, upgradeResults, timeToPower, coverageStats] = await Promise.all([
     networkRepo.getModel(tenantId, analysis.networkModelId),
     ifeRepo.getHostingCapacityByAnalysisId(tenantId, analysisId),
     ifeRepo.getUpgradeResultsByAnalysisId(tenantId, analysisId),
     ifeRepo.getTimeToPowerByAnalysisId(tenantId, analysisId),
+    calibrationRepo.getCoverageStats(tenantId),
   ]);
 
   if (!model) {
@@ -101,6 +115,10 @@ export async function computeAndPersistConfidenceRisk(
       upgradeResultsPresent: upgradeResults !== null,
       timeToPowerPresent: timeToPower !== null,
       activeQueueProjectsCount: timeToPower?.activeQueueProjectsCount ?? null,
+      costCoverageRate: coverageStats.costCoverageRate,
+      costSampleSize: coverageStats.costSampleSize,
+      codCoverageRate: coverageStats.codCoverageRate,
+      codSampleSize: coverageStats.codSampleSize,
     },
     options
   );
