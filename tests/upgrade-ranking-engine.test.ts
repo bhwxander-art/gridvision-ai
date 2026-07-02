@@ -7,9 +7,11 @@
  * implemented yet (Phase 3) — its tests remain `it.todo` below.
  */
 
-import { describe, it, expect } from "vitest";
-import type { UpgradeDetail } from "@/lib/db/types-ife";
+import { describe, it, expect, vi } from "vitest";
+import type { IfeAnalysis, IfeUpgradeResults, UpgradeDetail } from "@/lib/db/types-ife";
+import type { IfeRepository } from "@/lib/db/repositories/ife.repository";
 import { computeUpgradeRanking } from "@/lib/upgrade-ranking/upgrade-ranking-engine";
+import { getUpgradeRankingForAnalysis } from "@/lib/upgrade-ranking/upgrade-ranking-pipeline";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +24,61 @@ function makeDetail(overrides: Partial<UpgradeDetail> = {}): UpgradeDetail {
     cost_p50_m: null,
     ...overrides,
   };
+}
+
+function makeAnalysis(overrides: Partial<IfeAnalysis> = {}): IfeAnalysis {
+  return {
+    id: "analysis-1",
+    tenantId: "tenant-1",
+    networkModelId: "model-1",
+    poiBusId: "bus-1",
+    isoId: "PJM",
+    capacityMw: 100,
+    projectType: "solar",
+    targetCod: null,
+    inputSnapshot: {},
+    status: "completed",
+    progressPct: 100,
+    errorMessage: null,
+    queuedAt: "2024-01-01T00:00:00Z",
+    startedAt: "2024-01-01T00:00:00Z",
+    completedAt: "2024-01-01T00:00:00Z",
+    idempotencyKey: null,
+    createdAt: "2024-01-01T00:00:00Z",
+    updatedAt: "2024-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeUpgradeResults(overrides: Partial<IfeUpgradeResults> = {}): IfeUpgradeResults {
+  return {
+    id: "ur-1",
+    analysisId: "analysis-1",
+    tenantId: "tenant-1",
+    costP10M: null,
+    costP50M: null,
+    costP90M: null,
+    projectShareP50M: null,
+    upgradesRequired: 0,
+    milpOptimalityGapPct: null,
+    milpSolveSeconds: null,
+    upgradeDetails: [],
+    computedAt: "2024-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeMockIfeRepo(
+  opts: {
+    analysis?: IfeAnalysis | null;
+    upgradeResults?: IfeUpgradeResults | null;
+  } = {}
+): IfeRepository {
+  const repo = {
+    getAnalysis: vi.fn(async () => opts.analysis ?? null),
+    getUpgradeResultsByAnalysisId: vi.fn(async () => opts.upgradeResults ?? null),
+  };
+  return repo as unknown as IfeRepository;
 }
 
 describe("computeUpgradeRanking", () => {
@@ -139,7 +196,49 @@ describe("computeUpgradeRanking", () => {
 });
 
 describe("getUpgradeRankingForAnalysis", () => {
-  it.todo("returns null when the analysis is not found for the tenant");
-  it.todo("returns an empty ranking (not an error) when no ife_upgrade_results row exists yet");
-  it.todo("returns a ranking matching a hand-computed expectation when upgrade results are present");
+  it("throws when the analysis is not found for the tenant", async () => {
+    const ifeRepo = makeMockIfeRepo({ analysis: null });
+
+    await expect(
+      getUpgradeRankingForAnalysis("tenant-1", "nonexistent", ifeRepo)
+    ).rejects.toThrow("not found");
+  });
+
+  it("returns an empty ranking (not an error) when no ife_upgrade_results row exists yet", async () => {
+    const analysis = makeAnalysis();
+    const ifeRepo = makeMockIfeRepo({ analysis, upgradeResults: null });
+
+    const result = await getUpgradeRankingForAnalysis("tenant-1", "analysis-1", ifeRepo);
+
+    expect(result.analysis).toEqual(analysis);
+    expect(result.ranking.upgradesRanked).toBe(0);
+    expect(result.ranking.rankings).toEqual([]);
+    expect(typeof result.computeMs).toBe("number");
+  });
+
+  it("returns a ranking matching computeUpgradeRanking's own output when upgrade results are present", async () => {
+    const analysis = makeAnalysis();
+    const details: UpgradeDetail[] = [
+      makeDetail({ branch_id: "b1", capacity_increase_mw: 10 }),
+      makeDetail({ branch_id: "b2", capacity_increase_mw: 30 }),
+    ];
+    const upgradeResults = makeUpgradeResults({ upgradeDetails: details, upgradesRequired: 2 });
+    const ifeRepo = makeMockIfeRepo({ analysis, upgradeResults });
+
+    const result = await getUpgradeRankingForAnalysis("tenant-1", "analysis-1", ifeRepo);
+
+    const expected = computeUpgradeRanking(details);
+    expect(result.ranking.upgradesRanked).toBe(expected.upgradesRanked);
+    expect(result.ranking.rankings).toEqual(expected.rankings);
+  });
+
+  it("passes tenantId and analysisId through to both repository methods, unmodified", async () => {
+    const analysis = makeAnalysis();
+    const ifeRepo = makeMockIfeRepo({ analysis, upgradeResults: null });
+
+    await getUpgradeRankingForAnalysis("tenant-1", "analysis-1", ifeRepo);
+
+    expect(ifeRepo.getAnalysis).toHaveBeenCalledWith("tenant-1", "analysis-1");
+    expect(ifeRepo.getUpgradeResultsByAnalysisId).toHaveBeenCalledWith("tenant-1", "analysis-1");
+  });
 });
