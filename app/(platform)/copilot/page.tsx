@@ -433,7 +433,7 @@ export default function CopilotPage() {
         if (res.status === 401) {
           setError("Sign in to use the AI Copilot.");
         } else if (res.status === 503) {
-          setError("AI Copilot is not configured. Contact your administrator.");
+          setError(body.error ?? "AI Copilot is not configured. Contact your administrator.");
         } else {
           setError(body.error ?? `Error ${res.status}`);
         }

@@ -1,7 +1,7 @@
 import "server-only";
 import { type NextRequest } from "next/server";
 import { requireTenant } from "@/lib/auth/tenant";
-import { createAIProvider, GRID_SYSTEM_PROMPT } from "@/lib/ai/service";
+import { createAIProvider, getAiConfigError, GRID_SYSTEM_PROMPT } from "@/lib/ai/service";
 import { buildGridContextSnapshot, formatContextForPrompt } from "@/lib/ai/context";
 import { getServerClient, isDbConfigured } from "@/lib/db/client";
 import { ChatSessionRepository } from "@/lib/db/repositories/chat-session.repository";
@@ -56,9 +56,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   // Check API key
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const aiConfigError = getAiConfigError();
+  if (aiConfigError) {
     return new Response(
-      JSON.stringify({ error: "AI service is not configured" }),
+      JSON.stringify({ error: aiConfigError }),
       {
         status: 503,
         headers: { "Content-Type": "application/json" },

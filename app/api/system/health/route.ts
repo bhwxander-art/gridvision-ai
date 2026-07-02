@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isDbConfigured, getServerClient } from "@/lib/db/client";
+import { isAiConfigured, getAiConfigError } from "@/lib/ai/service";
 import { getCurrentTenant } from "@/lib/auth/tenant";
 import { hasPermission } from "@/lib/auth/rbac";
 import { handleDatabaseError } from "@/lib/utils/safe-error";
@@ -18,6 +19,10 @@ export interface HealthStatus {
     database: {
       status: "up" | "down";
       latency: number;
+    };
+    ai: {
+      status: "up" | "down";
+      error: string | null;
     };
   };
 }
@@ -66,7 +71,9 @@ export async function GET(): Promise<NextResponse<HealthStatus | { error: string
 
   const uptime = Math.floor(process.uptime());
   const buildVersion = process.env.NEXT_PUBLIC_BUILD_VERSION ?? "unknown";
-  const overallStatus = dbStatus === "up" ? "healthy" : "degraded";
+  const aiConfigError = getAiConfigError();
+  const aiStatus: "up" | "down" = isAiConfigured() ? "up" : "down";
+  const overallStatus = dbStatus === "up" && aiStatus === "up" ? "healthy" : "degraded";
 
   return NextResponse.json(
     {
@@ -81,6 +88,10 @@ export async function GET(): Promise<NextResponse<HealthStatus | { error: string
         database: {
           status: dbStatus,
           latency: dbLatency,
+        },
+        ai: {
+          status: aiStatus,
+          error: aiConfigError,
         },
       },
     },

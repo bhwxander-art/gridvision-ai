@@ -37,10 +37,33 @@ Generate a comprehensive executive report structured with these exact sections (
 
 Each section should be concise, data-driven, and appropriate for a utility board audience. Use bullet points for lists. Reference the provided grid data throughout.`;
 
+/**
+ * Returns true when the env var required to construct an AI provider is
+ * present. Call this before instantiating a provider to avoid throwing in
+ * dev/demo environments — mirrors lib/db/client.ts's isDbConfigured().
+ */
+export function isAiConfigured(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
+/**
+ * Returns an actionable diagnostic message naming the missing setting, or
+ * null when the AI provider is fully configured. Callers surface this in
+ * API error responses instead of a generic "not configured" string.
+ */
+export function getAiConfigError(): string | null {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return "ANTHROPIC_API_KEY is not set. Register at console.anthropic.com, " +
+      "create an API key, and add it to .env.local (see .env.example) or the " +
+      "deployment's environment variables, then redeploy.";
+  }
+  return null;
+}
+
 export function createAIProvider(): AIProvider {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not configured");
+    throw new Error(getAiConfigError() ?? "ANTHROPIC_API_KEY is not configured");
   }
   return new AnthropicProvider(apiKey);
 }

@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/auth/tenant";
-import { createAIProvider, EXECUTIVE_REPORT_SYSTEM_PROMPT } from "@/lib/ai/service";
+import { createAIProvider, getAiConfigError, EXECUTIVE_REPORT_SYSTEM_PROMPT } from "@/lib/ai/service";
 import { buildGridContextSnapshot, formatContextForPrompt } from "@/lib/ai/context";
 
 export const dynamic = "force-dynamic";
@@ -40,9 +40,10 @@ export async function POST(): Promise<NextResponse<ExecutiveReport | { error: st
   }
 
   // Check API key
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const aiConfigError = getAiConfigError();
+  if (aiConfigError) {
     return NextResponse.json(
-      { error: "AI service is not configured" },
+      { error: aiConfigError },
       { status: 503 }
     );
   }
